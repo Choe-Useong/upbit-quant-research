@@ -1,0 +1,21 @@
+{
+  "name": "liq_top80_mom_top50_lag1",
+  "feature_column": "mom_20",
+  "lag": 1,
+  "mode": "quantile",
+  "quantiles": 2,
+  "bucket_values": [1],
+  "ascending": false,
+  "exclude_warnings": false,
+  "min_age_days": 60,
+  "rank_filters": [
+    {
+      "feature_column": "traded_value_mean_20",
+      "mode": "quantile",
+      "lag": 1,
+      "quantiles": 10,
+      "bucket_values": [1, 2, 3, 4, 5, 6, 7, 8],
+      "ascending": false
+    }
+  ]
+}

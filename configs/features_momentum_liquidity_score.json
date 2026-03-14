@@ -1,0 +1,73 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "mom_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 20
+        }
+      },
+      {
+        "kind": "cross_rank",
+        "params": {
+          "descending": true
+        }
+      }
+    ],
+    "column_name": "mom_20_rank"
+  },
+  {
+    "source": "candle_acc_trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 20
+        }
+      },
+      {
+        "kind": "cross_rank",
+        "params": {
+          "descending": true
+        }
+      }
+    ],
+    "column_name": "liq_20_rank"
+  },
+  {
+    "components": [
+      {
+        "feature_column": "mom_20_rank",
+        "weight": -1.0
+      },
+      {
+        "feature_column": "liq_20_rank",
+        "weight": -0.5
+      }
+    ],
+    "combine": "weighted_sum",
+    "column_name": "mom_liq_score"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "name": "btc_eth_mom10_positive_lag1",
+  "feature_column": "mom_10",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 2,
+  "ascending": false,
+  "allowed_markets": [
+    "KRW-BTC",
+    "KRW-ETH"
+  ],
+  "value_filters": [
+    {
+      "feature_column": "mom_10",
+      "operator": "gt",
+      "value": 0.0,
+      "lag": 1
+    }
+  ]
+}

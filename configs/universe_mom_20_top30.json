@@ -1,0 +1,10 @@
+{
+  "name": "mom_20_top30_lag1",
+  "feature_column": "mom_20",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 30,
+  "ascending": false,
+  "exclude_warnings": false,
+  "min_age_days": 60
+}

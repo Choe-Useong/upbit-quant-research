@@ -1,0 +1,35 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 10
+        }
+      }
+    ],
+    "column_name": "mom_10"
+  },
+  {
+    "source": "candle_acc_trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "traded_value_mean_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

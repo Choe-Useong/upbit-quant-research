@@ -1,0 +1,19 @@
+{
+  "name": "sol_ma_5_10_lag1",
+  "feature_column": "sma5_gt_sma10",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 1,
+  "ascending": false,
+  "allowed_markets": [
+    "KRW-SOL"
+  ],
+  "value_filters": [
+    {
+      "feature_column": "sma5_gt_sma10",
+      "operator": "gt",
+      "value": 0.0,
+      "lag": 1
+    }
+  ]
+}

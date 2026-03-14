@@ -1,0 +1,5 @@
+﻿{
+  "weighting": "equal",
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "weekly"
+}

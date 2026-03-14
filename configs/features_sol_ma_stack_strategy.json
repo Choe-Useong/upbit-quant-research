@@ -1,0 +1,64 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "sma_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 60
+        }
+      }
+    ],
+    "column_name": "sma_60"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 120
+        }
+      }
+    ],
+    "column_name": "sma_120"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_20",
+      "operator": "gt",
+      "right_feature": "sma_60"
+    },
+    "column_name": "sma20_gt_sma60"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_60",
+      "operator": "gt",
+      "right_feature": "sma_120"
+    },
+    "column_name": "sma60_gt_sma120"
+  },
+  {
+    "logical": {
+      "operator": "and",
+      "features": [
+        "sma20_gt_sma60",
+        "sma60_gt_sma120"
+      ]
+    },
+    "column_name": "ma_stack_20_60_120"
+  }
+]

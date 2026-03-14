@@ -1,0 +1,34 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 5
+        }
+      }
+    ],
+    "column_name": "sma_5"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 10
+        }
+      }
+    ],
+    "column_name": "sma_10"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_5",
+      "operator": "gt",
+      "right_feature": "sma_10"
+    },
+    "column_name": "sma5_gt_sma10"
+  }
+]
