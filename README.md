@@ -9,6 +9,20 @@ Current scope:
 - run vectorbt backtests
 - run parameter grids with summary, equity comparison, and rolling IR plots
 
+## Purpose
+
+This repository is for systematic crypto strategy research on Upbit KRW markets.
+
+The current workflow is:
+- collect daily candles from Upbit
+- build reusable features
+- construct universe rules
+- generate target weights
+- run benchmark-relative backtests
+- compare parameter grids with equity and rolling IR diagnostics
+
+The repository is optimized for research iteration, not production trading.
+
 ## Structure
 
 - `lib/upbit_collector.py`: Upbit daily candle collection
@@ -21,6 +35,38 @@ Current scope:
 - `scripts/build_weights.py`: build weights CSV
 - `scripts/run_vectorbt.py`: run one backtest
 - `scripts/run_grid.py`: run parameter grid
+
+## Current Capabilities
+
+- Daily Upbit KRW candle collection
+- Chained feature generation
+  - momentum
+  - rolling mean / sum
+  - volatility
+  - cross-sectional rank / percentile
+  - calendar aggregations
+  - reference-market comparisons
+- Comparison and logical features
+  - examples: `sma_20 > sma_60`, boolean feature combinations
+- Universe construction
+  - top-n
+  - quantile
+  - lagged selection
+  - value filters
+  - rank filters
+  - allowed / excluded markets
+- Weight generation
+  - equal weight
+  - rank weight
+  - daily / weekly / monthly rebalance frequencies
+- Vectorbt backtesting
+  - target weight based execution
+  - benchmark-relative excess return tracking
+  - information ratio and rolling information ratio
+- Grid search
+  - parameter sweeps across features, universe rules, and rebalancing
+  - constraint support such as `short < long` or `short < mid < long`
+  - automatic comparison plots for top runs
 
 ## Install
 
@@ -94,3 +140,6 @@ py scripts/run_grid.py --config-json configs/grid_xrp_ma_cross_fee5bp.json --ope
 - `configs/` is the main reproducibility layer.
 - Benchmark-relative metrics use the configured `benchmark_market`.
 - Grid runner supports simple constraints such as `short < long` and `short < mid < long`.
+- Current research is daily-bar based. Intraday execution modeling is not included.
+- Upbit official API does not provide market cap data in this project.
+- Many reported results are exploratory research results and should not be treated as production-ready signals without further validation.
