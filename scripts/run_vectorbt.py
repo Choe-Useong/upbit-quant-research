@@ -133,6 +133,11 @@ def print_summary(summary: pd.Series) -> None:
         "Benchmark Calmar Ratio",
         "Information Ratio",
         "Annualized Information Ratio",
+        "Recent 1Y Return [%]",
+        "Recent 1Y Benchmark Return [%]",
+        "Recent 1Y Information Ratio",
+        "Recent 1Y AIR",
+        "Recent 1Y Max Drawdown [%]",
         "Max Drawdown [%]",
         "Sharpe Ratio",
         "Calmar Ratio",
@@ -338,10 +343,66 @@ def compute_rolling_information_ratio(
     return frame
 
 
+def compute_recent_1y_stats(
+    equity_curve: pd.Series,
+    benchmark_curve: pd.Series,
+    annualization_factor: int = 252,
+) -> pd.Series:
+    empty_result = pd.Series(
+        {
+            "Recent 1Y Return [%]": float("nan"),
+            "Recent 1Y Benchmark Return [%]": float("nan"),
+            "Recent 1Y Information Ratio": float("nan"),
+            "Recent 1Y AIR": float("nan"),
+            "Recent 1Y Max Drawdown [%]": float("nan"),
+        }
+    )
+    if equity_curve.empty or benchmark_curve.empty:
+        return empty_result
+
+    last_timestamp = pd.Timestamp(equity_curve.index[-1])
+    start_timestamp = last_timestamp - pd.DateOffset(years=1)
+    aligned = pd.concat(
+        [
+            equity_curve[equity_curve.index >= start_timestamp].rename("strategy"),
+            benchmark_curve[benchmark_curve.index >= start_timestamp].rename("benchmark"),
+        ],
+        axis=1,
+        join="inner",
+    ).dropna()
+    if len(aligned) < 2:
+        return empty_result
+
+    recent_equity = aligned["strategy"]
+    recent_benchmark = aligned["benchmark"]
+    recent_return = ((float(recent_equity.iloc[-1] / recent_equity.iloc[0])) - 1.0) * 100.0
+    recent_benchmark_return = (
+        (float(recent_benchmark.iloc[-1] / recent_benchmark.iloc[0])) - 1.0
+    ) * 100.0
+    recent_ir = compute_information_ratio(
+        compute_return_series(recent_equity),
+        compute_return_series(recent_benchmark),
+        annualization_factor=annualization_factor,
+    )
+    return pd.Series(
+        {
+            "Recent 1Y Return [%]": recent_return,
+            "Recent 1Y Benchmark Return [%]": recent_benchmark_return,
+            "Recent 1Y Information Ratio": recent_ir["Information Ratio"],
+            "Recent 1Y AIR": recent_ir["Annualized Information Ratio"],
+            "Recent 1Y Max Drawdown [%]": compute_max_drawdown_pct(recent_equity),
+        }
+    )
+
+
 def summarize_rolling_information_ratio(rolling_ir: pd.DataFrame) -> pd.Series:
     summary: dict[str, float] = {}
     for column in rolling_ir.columns:
-        series = pd.to_numeric(rolling_ir[column], errors="coerce").dropna()
+        series = (
+            pd.to_numeric(rolling_ir[column], errors="coerce")
+            .replace([float("inf"), float("-inf")], float("nan"))
+            .dropna()
+        )
         label = column.replace("rolling_ir_", "Rolling IR ").replace("d", "d")
         if series.empty:
             summary[f"{label} Mean"] = float("nan")
@@ -472,10 +533,23 @@ def main() -> None:
         periods_per_day=periods_per_day,
         annualization_factor=periods_per_year,
     )
+    recent_1y_stats = compute_recent_1y_stats(
+        equity_curve,
+        aligned_benchmark_curve,
+        annualization_factor=periods_per_year,
+    )
     rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
     summary.loc["Timeframe"] = timeframe
     summary.loc["Periods Per Year"] = periods_per_year
-    summary = pd.concat([summary, benchmark_stats, ir_stats, rolling_ir_summary])
+    summary = pd.concat(
+        [
+            summary,
+            benchmark_stats,
+            ir_stats,
+            recent_1y_stats,
+            rolling_ir_summary,
+        ]
+    )
     print_summary(summary)
     write_summary_csv(out_dir / "summary.csv", summary)
     write_equity_csv(out_dir / "equity_curve.csv", equity_curve)

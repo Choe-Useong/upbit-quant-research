@@ -94,6 +94,20 @@
 - `every_bar` is best, but `daily` is still competitive.
 - `weekly` degrades materially.
 
+### Recent 1Y Review
+
+- `10/200 every_bar`
+  - Recent 1Y Return `+3.01%`, Benchmark `-15.27%`, Recent 1Y AIR `0.3867`, Recent 1Y MDD `-19.51%`
+  - Review: Still acceptable, but not the best recent BTC setup.
+
+- `5/200 every_bar`
+  - Recent 1Y Return `+13.06%`, Benchmark `-15.27%`, Recent 1Y AIR `0.6485`, Recent 1Y MDD `-16.47%`
+  - Review: Best recent 1Y BTC candidate. Faster short window improved recent responsiveness without blowing up drawdown.
+
+- `5/200 daily`
+  - Recent 1Y Return `+8.03%`, Benchmark `-15.27%`, Recent 1Y AIR `0.5126`, Recent 1Y MDD `-17.68%`
+  - Review: Strong practical alternative. Slightly weaker than `5/200 every_bar`, but still good on both AIR and drawdown.
+
 ## ETH
 
 ### Overall Best 3
@@ -163,6 +177,20 @@
 - `every_bar` dominates, but even `daily` remains strong.
 - This is the clearest candidate for follow-up validation.
 
+### Recent 1Y Review
+
+- `5/20 every_bar`
+  - Recent 1Y Return `+122.52%`, Benchmark `+9.68%`, Recent 1Y AIR `1.0933`, Recent 1Y MDD `-23.81%`
+  - Review: Still dominant even on the most recent horizon. This is the strongest current ETH setup, not just the strongest full-sample setup.
+
+- `10/200 every_bar`
+  - Recent 1Y Return `+38.86%`, Benchmark `+9.68%`, Recent 1Y AIR `0.2082`, Recent 1Y MDD `-43.99%`
+  - Review: Full-sample robustness is good, but recent 1Y performance is much weaker than `5/20`.
+
+- `5/120 every_bar`
+  - Recent 1Y Return `+36.42%`, Benchmark `+9.68%`, Recent 1Y AIR `0.1889`, Recent 1Y MDD `-34.67%`
+  - Review: Also positive, but clearly behind `5/20`. Looks more like a secondary option than a current leader.
+
 ## SOL
 
 ### Overall Best 3
@@ -230,6 +258,20 @@
 - SOL shows decent benchmark-relative quality, but absolute returns are much smaller than ETH/BTC/XRP.
 - `weekly` is almost unusable here.
 - SOL seems to prefer medium-speed trend filters rather than very short crosses.
+
+### Recent 1Y Review
+
+- `5/60 every_bar`
+  - Recent 1Y Return `-6.55%`, Benchmark `-34.03%`, Recent 1Y AIR `0.3145`, Recent 1Y MDD `-31.92%`
+  - Review: Still beats benchmark, but the negative recent return weakens conviction.
+
+- `10/60 every_bar`
+  - Recent 1Y Return `-20.11%`, Benchmark `-34.03%`, Recent 1Y AIR `0.0755`, Recent 1Y MDD `-41.62%`
+  - Review: Weak recent candidate. This one should move down the priority list.
+
+- `10/200 every_bar`
+  - Recent 1Y Return `+10.27%`, Benchmark `-34.03%`, Recent 1Y AIR `0.5349`, Recent 1Y MDD `-33.78%`
+  - Review: Best recent 1Y SOL setup and also the more robust full-sample choice. This is the right SOL candidate to keep.
 
 ## XRP
 
@@ -299,6 +341,20 @@
 - `every_bar` and `daily` can work; `weekly` is poor.
 - XRP is promising but less convincing than ETH.
 
+### Recent 1Y Review
+
+- `10/60 every_bar`
+  - Recent 1Y Return `-21.73%`, Benchmark `-41.85%`, Recent 1Y AIR `0.2556`, Recent 1Y MDD `-42.61%`
+  - Review: Still beats benchmark, but recent 1Y return is weak in absolute terms.
+
+- `5/20 every_bar`
+  - Recent 1Y Return `+0.04%`, Benchmark `-41.85%`, Recent 1Y AIR `0.6756`, Recent 1Y MDD `-28.50%`
+  - Review: Best recent 1Y XRP candidate. This is now the preferred XRP setup over `10/60`.
+
+- `5/60 every_bar`
+  - Recent 1Y Return `-27.63%`, Benchmark `-41.85%`, Recent 1Y AIR `0.1250`, Recent 1Y MDD `-41.44%`
+  - Review: Inferior to both `10/60` and `5/20` on the recent horizon.
+
 ## Cross-Asset Summary
 
 ### Best-by-Asset
@@ -307,6 +363,13 @@
 - ETH: `5/20 every_bar`, AIR `0.5213`
 - SOL: `5/60 every_bar`, AIR `0.4354`
 - XRP: `10/60 every_bar`, AIR `0.3276`
+
+### Best-by-Asset on Recent 1Y
+
+- BTC: `5/200 every_bar`, Recent 1Y AIR `0.6485`
+- ETH: `5/20 every_bar`, Recent 1Y AIR `1.0933`
+- SOL: `10/200 every_bar`, Recent 1Y AIR `0.5349`
+- XRP: `5/20 every_bar`, Recent 1Y AIR `0.6756`
 
 ### Worst-by-Asset
 
@@ -320,18 +383,19 @@
 - The dominant pattern today is that `every_bar` outperforms `weekly` across all four assets.
 - `weekly` is consistently the weakest choice and often collapses in AIR.
 - `daily` can still work, but in most assets it lags `every_bar`.
-- ETH is the standout asset. Among everything tested today, `ETH 240m 5/20 every_bar` is the strongest candidate.
-- BTC is stable and credible, but less explosive than ETH. `BTC 10/200 every_bar` is the cleanest BTC setup, and `BTC 5/200 daily` is a practical alternative.
-- SOL has respectable AIR, but the most robust SOL setup is likely `10/200 every_bar`, not the headline AIR winner `5/60 every_bar`.
-- XRP can produce very large returns, but its lower-tail rolling IR behavior is rough. `10/60 every_bar` is the strongest XRP setup, while `5/20 every_bar` is arguably the more balanced one.
+- ETH is still the standout asset. Among everything tested today, `ETH 240m 5/20 every_bar` remains the strongest candidate on both full-sample and recent-1Y views.
+- BTC remains stable and credible, but the recent 1Y winner is `5/200 every_bar`, not `10/200 every_bar`. The slower `10/200` still looks cleaner on full-sample robustness, while `5/200` looks better right now.
+- SOL changes meaningfully when recent 1Y is considered. The headline AIR winner `5/60 every_bar` is less convincing, while `10/200 every_bar` becomes the preferred SOL candidate.
+- XRP also changes when recent 1Y is considered. `10/60 every_bar` is the best full-sample run, but `5/20 every_bar` is the better current candidate.
+- Recent 1Y results make the candidate set more practical: `ETH 5/20`, `BTC 5/200`, `SOL 10/200`, and `XRP 5/20`.
 
 ## Next Actions
 
 - Prioritize validation on:
   - `ETH 5/20 every_bar`
-  - `ETH 10/200 every_bar`
+  - `BTC 5/200 every_bar`
   - `BTC 10/200 every_bar`
 - Secondary candidates:
-  - `BTC 5/200 daily`
   - `SOL 10/200 every_bar`
   - `XRP 5/20 every_bar`
+  - `ETH 10/200 every_bar`

@@ -46,6 +46,7 @@ from scripts.run_vectorbt import (
     timeframe_to_pandas_freq,
     compute_return_series,
     compute_rolling_information_ratio,
+    compute_recent_1y_stats,
     summarize_rolling_information_ratio,
     load_all_candles,
 )
@@ -251,6 +252,11 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
         "Benchmark Calmar Ratio",
         "Information Ratio",
         "Annualized Information Ratio",
+        "Recent 1Y Return [%]",
+        "Recent 1Y Benchmark Return [%]",
+        "Recent 1Y Information Ratio",
+        "Recent 1Y AIR",
+        "Recent 1Y Max Drawdown [%]",
         "Max Drawdown [%]",
         "Sharpe Ratio",
         "Calmar Ratio",
@@ -551,6 +557,11 @@ def main() -> None:
             periods_per_day=periods_per_day,
             annualization_factor=periods_per_year,
         )
+        recent_1y_stats = compute_recent_1y_stats(
+            equity_curve,
+            aligned_benchmark_curve,
+            annualization_factor=periods_per_year,
+        )
         rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
         summary = pd.concat(
             [
@@ -562,6 +573,7 @@ def main() -> None:
                     annualization_factor=periods_per_year,
                 ),
                 ir_stats,
+                recent_1y_stats,
                 rolling_ir_summary,
             ]
         )
