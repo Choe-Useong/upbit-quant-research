@@ -1,0 +1,98 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 1
+        }
+      }
+    ],
+    "column_name": "sma_1"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 5
+        }
+      }
+    ],
+    "column_name": "sma_5"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 10
+        }
+      }
+    ],
+    "column_name": "sma_10"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "sma_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 120
+        }
+      }
+    ],
+    "column_name": "sma_120"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 200
+        }
+      }
+    ],
+    "column_name": "sma_200"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_1",
+      "operator": "gt",
+      "right_feature": "sma_120"
+    },
+    "column_name": "sma1_gt_sma120"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_5",
+      "operator": "gt",
+      "right_feature": "sma_20"
+    },
+    "column_name": "sma5_gt_sma20"
+  },
+  {
+    "compare": {
+      "left_feature": "sma_10",
+      "operator": "gt",
+      "right_feature": "sma_200"
+    },
+    "column_name": "sma10_gt_sma200"
+  }
+]

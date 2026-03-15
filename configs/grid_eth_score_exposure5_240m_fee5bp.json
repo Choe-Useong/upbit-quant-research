@@ -1,0 +1,180 @@
+{
+  "candle_dir": "data/upbit/minutes/240",
+  "timeframe": "240m",
+  "out_dir": "data/grid/eth_score_exposure5_240m_fee5bp",
+  "run_name_template": "eth_score_exposure_top5_every_bar_fee5bp",
+  "rolling_ir_windows": [
+    126,
+    252
+  ],
+  "save_rolling_ir_plots": true,
+  "top_curve_count": 1,
+  "ranking_metric": "Total Return [%]",
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 5
+          }
+        }
+      ],
+      "column_name": "sma_5"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 10
+          }
+        }
+      ],
+      "column_name": "sma_10"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 20
+          }
+        }
+      ],
+      "column_name": "sma_20"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 120
+          }
+        }
+      ],
+      "column_name": "sma_120"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 200
+          }
+        }
+      ],
+      "column_name": "sma_200"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_5",
+        "operator": "gt",
+        "right_feature": "sma_20"
+      },
+      "column_name": "sma5_gt_sma20"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_10",
+        "operator": "gt",
+        "right_feature": "sma_200"
+      },
+      "column_name": "sma10_gt_sma200"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_5",
+        "operator": "gt",
+        "right_feature": "sma_120"
+      },
+      "column_name": "sma5_gt_sma120"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_20",
+        "operator": "gt",
+        "right_feature": "sma_200"
+      },
+      "column_name": "sma20_gt_sma200"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_5",
+        "operator": "gt",
+        "right_feature": "sma_200"
+      },
+      "column_name": "sma5_gt_sma200"
+    },
+    {
+      "components": [
+        {
+          "feature_column": "sma5_gt_sma20",
+          "weight": 0.2
+        },
+        {
+          "feature_column": "sma10_gt_sma200",
+          "weight": 0.2
+        },
+        {
+          "feature_column": "sma5_gt_sma120",
+          "weight": 0.2
+        },
+        {
+          "feature_column": "sma20_gt_sma200",
+          "weight": 0.2
+        },
+        {
+          "feature_column": "sma5_gt_sma200",
+          "weight": 0.2
+        }
+      ],
+      "combine": "weighted_sum",
+      "column_name": "exposure_score"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "exposure_score",
+    "lag": 1,
+    "mode": "top_n",
+    "top_n": 1,
+    "ascending": false,
+    "allowed_markets": [
+      "KRW-ETH"
+    ],
+    "value_filters": [
+      {
+        "feature_column": "exposure_score",
+        "operator": "gt",
+        "value": 0.0,
+        "lag": 1
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "feature_value",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "every_bar",
+    "feature_value_scale": 1.0,
+    "feature_value_clip_min": 0.0,
+    "feature_value_clip_max": 1.0
+  },
+  "vectorbt_spec_template": {
+    "price_column": "trade_price",
+    "init_cash": 1000000.0,
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-ETH"
+  },
+  "grid": {
+    "dummy": [
+      1
+    ]
+  }
+}

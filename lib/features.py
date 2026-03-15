@@ -374,6 +374,108 @@ def _safe_ratio(numerator: float | None, denominator: float | None) -> float | N
     return numerator / denominator
 
 
+def _wilder_smooth(values: Sequence[float | None], window: int) -> list[float | None]:
+    result: list[float | None] = [None] * len(values)
+    if window <= 0:
+        raise ValueError("window must be positive")
+    if len(values) < window:
+        return result
+
+    initial = values[:window]
+    if any(value is None for value in initial):
+        return result
+
+    smoothed = sum(float(value) for value in initial if value is not None)
+    result[window - 1] = smoothed
+    for idx in range(window, len(values)):
+        value = values[idx]
+        if value is None:
+            result[idx] = None
+            continue
+        smoothed = smoothed - (smoothed / window) + float(value)
+        result[idx] = smoothed
+    return result
+
+
+def _adx(
+    highs: Sequence[float | None],
+    lows: Sequence[float | None],
+    closes: Sequence[float | None],
+    window: int,
+) -> list[float | None]:
+    length = len(closes)
+    if len(highs) != length or len(lows) != length:
+        raise ValueError("ADX input lengths must match")
+
+    true_ranges: list[float | None] = [None] * length
+    plus_dm: list[float | None] = [None] * length
+    minus_dm: list[float | None] = [None] * length
+
+    for idx in range(length):
+        high = highs[idx]
+        low = lows[idx]
+        close = closes[idx]
+        if high is None or low is None or close is None:
+            continue
+        if idx == 0:
+            true_ranges[idx] = high - low
+            plus_dm[idx] = 0.0
+            minus_dm[idx] = 0.0
+            continue
+
+        prev_high = highs[idx - 1]
+        prev_low = lows[idx - 1]
+        prev_close = closes[idx - 1]
+        if prev_high is None or prev_low is None or prev_close is None:
+            continue
+
+        up_move = high - prev_high
+        down_move = prev_low - low
+        plus_dm[idx] = up_move if up_move > down_move and up_move > 0 else 0.0
+        minus_dm[idx] = down_move if down_move > up_move and down_move > 0 else 0.0
+        true_ranges[idx] = max(high - low, abs(high - prev_close), abs(low - prev_close))
+
+    smoothed_tr = _wilder_smooth(true_ranges, window)
+    smoothed_plus_dm = _wilder_smooth(plus_dm, window)
+    smoothed_minus_dm = _wilder_smooth(minus_dm, window)
+
+    plus_di: list[float | None] = [None] * length
+    minus_di: list[float | None] = [None] * length
+    dx: list[float | None] = [None] * length
+    for idx in range(length):
+        tr = smoothed_tr[idx]
+        pdm = smoothed_plus_dm[idx]
+        mdm = smoothed_minus_dm[idx]
+        if tr is None or pdm is None or mdm is None or tr == 0:
+            continue
+        plus_di[idx] = 100.0 * (pdm / tr)
+        minus_di[idx] = 100.0 * (mdm / tr)
+        denom = plus_di[idx] + minus_di[idx]
+        if denom == 0:
+            dx[idx] = 0.0
+        else:
+            dx[idx] = 100.0 * abs(plus_di[idx] - minus_di[idx]) / denom
+
+    adx: list[float | None] = [None] * length
+    first_adx_idx = (window * 2) - 2
+    if first_adx_idx >= length:
+        return adx
+
+    initial_dx = dx[window - 1 : first_adx_idx + 1]
+    if any(value is None for value in initial_dx):
+        return adx
+
+    current_adx = sum(float(value) for value in initial_dx if value is not None) / window
+    adx[first_adx_idx] = current_adx
+    for idx in range(first_adx_idx + 1, length):
+        value = dx[idx]
+        if value is None:
+            continue
+        current_adx = ((current_adx * (window - 1)) + float(value)) / window
+        adx[idx] = current_adx
+    return adx
+
+
 def _apply_by_market(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -535,6 +637,32 @@ def transform_volatility(
     return _apply_by_market(rows, values, group_volatility, params)
 
 
+def transform_adx(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    high_column = str(params.get("high_column", "high_price"))
+    low_column = str(params.get("low_column", "low_price"))
+
+    high_values = _values_from_column(rows, high_column)
+    low_values = _values_from_column(rows, low_column)
+    close_values = values
+
+    result: list[float | None] = [None] * len(rows)
+    for indexes in _market_groups(rows):
+        market_highs = [high_values[idx] for idx in indexes]
+        market_lows = [low_values[idx] for idx in indexes]
+        market_closes = [close_values[idx] for idx in indexes]
+        transformed = _adx(market_highs, market_lows, market_closes, window)
+        if len(transformed) != len(indexes):
+            raise ValueError("Transform length mismatch in market scope")
+        for idx, value in zip(indexes, transformed):
+            result[idx] = value
+    return result
+
+
 def transform_cross_rank(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -679,6 +807,7 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,
     "volatility": transform_volatility,
+    "adx": transform_adx,
     "cross_rank": transform_cross_rank,
     "cross_percentile": transform_cross_percentile,
     "calendar_mean": transform_calendar_mean,

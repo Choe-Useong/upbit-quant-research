@@ -199,6 +199,9 @@ def _load_weight_spec_from_payload(payload: dict[str, Any]) -> WeightSpec:
         max_positions=(None if payload.get("max_positions") is None else int(payload["max_positions"])),
         universe_name=payload.get("universe_name"),
         rebalance_frequency=payload.get("rebalance_frequency", "daily"),
+        feature_value_scale=float(payload.get("feature_value_scale", 1.0)),
+        feature_value_clip_min=float(payload.get("feature_value_clip_min", 0.0)),
+        feature_value_clip_max=float(payload.get("feature_value_clip_max", 1.0)),
     )
 
 

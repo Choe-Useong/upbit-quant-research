@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Iterable
 
 
-WEIGHTING_METHODS = {"equal", "rank"}
+WEIGHTING_METHODS = {"equal", "rank", "feature_value"}
 REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
 
 
@@ -18,12 +18,20 @@ class WeightSpec:
     max_positions: int | None = None
     universe_name: str | None = None
     rebalance_frequency: str = "daily"
+    feature_value_scale: float = 1.0
+    feature_value_clip_min: float = 0.0
+    feature_value_clip_max: float = 1.0
 
     def resolved_name(self) -> str:
         prefix = self.universe_name or "universe"
         if self.weighting == "equal":
             return (
                 f"{prefix}__equal_{self.rebalance_frequency}"
+                f"_gross{self.gross_exposure:g}"
+            )
+        if self.weighting == "feature_value":
+            return (
+                f"{prefix}__feature_value_{self.rebalance_frequency}"
                 f"_gross{self.gross_exposure:g}"
             )
         return (
@@ -55,6 +63,43 @@ def _rank_weights(count: int, gross_exposure: float, rank_power: float) -> list[
     raw = [1.0 / (rank ** rank_power) for rank in range(1, count + 1)]
     total = sum(raw)
     return [(value / total) * gross_exposure for value in raw]
+
+
+def _clip(value: float, minimum: float, maximum: float) -> float:
+    return min(max(value, minimum), maximum)
+
+
+def _feature_value_weights(
+    scoped_rows: list[dict[str, str]],
+    gross_exposure: float,
+    scale: float,
+    clip_min: float,
+    clip_max: float,
+) -> list[tuple[int, float]]:
+    if not scoped_rows:
+        return []
+    if scale <= 0:
+        raise ValueError("feature_value_scale must be positive")
+
+    all_scores: list[tuple[int, float]] = []
+    for idx, row in enumerate(scoped_rows):
+        raw_value = float(row["feature_value"]) / scale
+        score = _clip(raw_value, clip_min, clip_max)
+        all_scores.append((idx, score))
+
+    scored_rows = [(idx, score) for idx, score in all_scores if score > 0]
+    active_count = len(scored_rows)
+    if active_count <= 0:
+        return [(idx, 0.0) for idx, _ in all_scores]
+
+    active_weights = {
+        idx: gross_exposure * (score / active_count)
+        for idx, score in scored_rows
+    }
+    return [
+        (idx, active_weights.get(idx, 0.0))
+        for idx, _ in all_scores
+    ]
 
 
 def _parse_date(date_utc: str) -> date:
@@ -107,14 +152,25 @@ def build_weight_table(
         scoped = indexes
         if spec.max_positions is not None:
             scoped = scoped[: spec.max_positions]
-        count = len(scoped)
+        scoped_rows = [rows[idx] for idx in scoped]
+        count = len(scoped_rows)
         if spec.weighting == "equal":
             weights = _equal_weights(count, spec.gross_exposure)
-        else:
+            weighted_pairs = list(zip(range(count), weights))
+        elif spec.weighting == "rank":
             weights = _rank_weights(count, spec.gross_exposure, spec.rank_power)
+            weighted_pairs = list(zip(range(count), weights))
+        else:
+            weighted_pairs = _feature_value_weights(
+                scoped_rows,
+                spec.gross_exposure,
+                spec.feature_value_scale,
+                spec.feature_value_clip_min,
+                spec.feature_value_clip_max,
+            )
 
-        for local_rank, (idx, weight) in enumerate(zip(scoped, weights), start=1):
-            row = rows[idx]
+        for local_rank, (scoped_idx, weight) in enumerate(weighted_pairs, start=1):
+            row = scoped_rows[scoped_idx]
             weighted_rows.append(
                 {
                     "date_utc": row["date_utc"],

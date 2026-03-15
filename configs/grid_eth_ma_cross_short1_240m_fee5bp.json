@@ -1,0 +1,94 @@
+{
+  "candle_dir": "data/upbit/minutes/240",
+  "timeframe": "240m",
+  "out_dir": "data/grid/eth_ma_cross_short1_240m_fee5bp",
+  "run_name_template": "eth_ma_240m_{short}_{long}_every_bar_fee5bp",
+  "rolling_ir_windows": [
+    126,
+    252
+  ],
+  "save_rolling_ir_plots": true,
+  "top_curve_count": 5,
+  "ranking_metric": "Total Return [%]",
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{short}"
+          }
+        }
+      ],
+      "column_name": "sma_{short}"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{long}"
+          }
+        }
+      ],
+      "column_name": "sma_{long}"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_{short}",
+        "operator": "gt",
+        "right_feature": "sma_{long}"
+      },
+      "column_name": "sma{short}_gt_sma{long}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "sma{short}_gt_sma{long}",
+    "lag": 1,
+    "mode": "top_n",
+    "top_n": 1,
+    "ascending": false,
+    "allowed_markets": [
+      "KRW-ETH"
+    ],
+    "value_filters": [
+      {
+        "feature_column": "sma{short}_gt_sma{long}",
+        "operator": "gt",
+        "value": 0.0,
+        "lag": 1
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "every_bar"
+  },
+  "vectorbt_spec_template": {
+    "price_column": "trade_price",
+    "init_cash": 1000000.0,
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-ETH"
+  },
+  "grid": {
+    "short": [
+      1,
+      5,
+      10
+    ],
+    "long": [
+      20,
+      60,
+      120,
+      200
+    ]
+  },
+  "constraints": [
+    "short < long"
+  ]
+}

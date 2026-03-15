@@ -33,6 +33,9 @@ def load_weight_spec(path: Path) -> WeightSpec:
         max_positions=payload.get("max_positions"),
         universe_name=payload.get("universe_name"),
         rebalance_frequency=payload.get("rebalance_frequency", "daily"),
+        feature_value_scale=payload.get("feature_value_scale", 1.0),
+        feature_value_clip_min=payload.get("feature_value_clip_min", 0.0),
+        feature_value_clip_max=payload.get("feature_value_clip_max", 1.0),
     )
 
 
