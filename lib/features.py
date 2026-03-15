@@ -338,6 +338,21 @@ def _pct_change(values: Sequence[float | None], periods: int) -> list[float | No
     return result
 
 
+def _difference(values: Sequence[float | None], periods: int) -> list[float | None]:
+    result: list[float | None] = []
+    for idx, value in enumerate(values):
+        prev_idx = idx - periods
+        if prev_idx < 0:
+            result.append(None)
+            continue
+        prev = values[prev_idx]
+        if value is None or prev is None:
+            result.append(None)
+            continue
+        result.append(value - prev)
+    return result
+
+
 def _log_return(values: Sequence[float | None], periods: int) -> list[float | None]:
     result: list[float | None] = []
     for idx, value in enumerate(values):
@@ -473,6 +488,15 @@ def transform_rolling_sum(
 ) -> list[float | None]:
     window = int(params["window"])
     return _apply_by_market(rows, values, lambda group, _: _rolling_sum(group, window), params)
+
+
+def transform_delta(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    periods = int(params.get("periods", 1))
+    return _apply_by_market(rows, values, lambda group, _: _difference(group, periods), params)
 
 
 def transform_vwma(
@@ -650,6 +674,7 @@ def transform_ratio_to_reference(
 TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "momentum": transform_momentum,
     "simple_return": transform_simple_return,
+    "delta": transform_delta,
     "rolling_mean": transform_rolling_mean,
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,
