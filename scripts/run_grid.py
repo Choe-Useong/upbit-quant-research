@@ -8,6 +8,7 @@ import re
 import sys
 import webbrowser
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -39,8 +40,13 @@ from scripts.run_vectorbt import (
     build_benchmark_curve,
     compute_excess_curves,
     compute_information_ratio,
+    infer_periods_per_year,
+    infer_timeframe,
+    periods_per_day_for_timeframe,
+    timeframe_to_pandas_freq,
     compute_return_series,
     compute_rolling_information_ratio,
+    summarize_rolling_information_ratio,
     load_all_candles,
 )
 
@@ -235,6 +241,8 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
         "Start Value",
         "End Value",
         "Total Return [%]",
+        "Timeframe",
+        "Periods Per Year",
         "Benchmark Market",
         "Benchmark Total Return [%]",
         "Benchmark Max Drawdown [%]",
@@ -254,7 +262,60 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
     for key in keys:
         if key in summary.index:
             result[key] = summary[key]
+    for key in summary.index:
+        if str(key).startswith("Rolling IR "):
+            result[str(key)] = summary[key]
     return result
+
+
+def _attach_plateau_air_mean(
+    result_frame: pd.DataFrame,
+    grid_config: dict[str, list[Any]],
+) -> pd.DataFrame:
+    if result_frame.empty:
+        return result_frame
+    if "Annualized Information Ratio" not in result_frame.columns:
+        return result_frame
+    if "short" not in result_frame.columns or "long" not in result_frame.columns:
+        return result_frame
+
+    short_values = list(grid_config.get("short", []))
+    long_values = list(grid_config.get("long", []))
+    if not short_values or not long_values:
+        return result_frame
+
+    short_index = {value: idx for idx, value in enumerate(short_values)}
+    long_index = {value: idx for idx, value in enumerate(long_values)}
+
+    frame = result_frame.copy()
+    frame["Plateau AIR Mean"] = float("nan")
+
+    group_cols = ["status"]
+    if "rebalance_frequency" in frame.columns:
+        group_cols.append("rebalance_frequency")
+
+    for _, group in frame.groupby(group_cols, dropna=False):
+        ok_group = group[group["status"] == "ok"].copy()
+        if ok_group.empty:
+            continue
+        for idx, row in ok_group.iterrows():
+            try:
+                s_idx = short_index[row["short"]]
+                l_idx = long_index[row["long"]]
+            except Exception:
+                continue
+            neighbors = ok_group[
+                (ok_group.index != idx)
+                & (ok_group["short"].map(short_index).sub(s_idx).abs() <= 1)
+                & (ok_group["long"].map(long_index).sub(l_idx).abs() <= 1)
+            ]
+            if neighbors.empty:
+                continue
+            frame.loc[idx, "Plateau AIR Mean"] = pd.to_numeric(
+                neighbors["Annualized Information Ratio"],
+                errors="coerce",
+            ).mean()
+    return frame
 
 
 def _render_run_payloads(config: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
@@ -264,6 +325,35 @@ def _render_run_payloads(config: dict[str, Any], context: dict[str, Any]) -> dic
         "weight_payload": _render_value(config["weight_spec_template"], context),
         "vectorbt_payload": _render_value(config.get("vectorbt_spec_template", {}), context),
     }
+
+
+def _feature_reference_markets(feature_payload: list[dict[str, Any]]) -> set[str]:
+    markets: set[str] = set()
+    for item in feature_payload:
+        source = item.get("source")
+        if isinstance(source, str) and source.startswith("market:"):
+            _, market_code, _ = source.split(":", 2)
+            markets.add(market_code)
+    return markets
+
+
+def _required_markets_for_run(
+    feature_payload: list[dict[str, Any]],
+    universe_payload: dict[str, Any],
+    benchmark_market: str,
+) -> tuple[str, ...]:
+    markets = set(universe_payload.get("allowed_markets", []))
+    markets.update(_feature_reference_markets(feature_payload))
+    if benchmark_market:
+        markets.add(benchmark_market)
+    return tuple(sorted(markets))
+
+
+def _filter_candle_rows(candle_rows: list, required_markets: tuple[str, ...]) -> list:
+    if not required_markets:
+        return candle_rows
+    allowed = set(required_markets)
+    return [row for row in candle_rows if row.market in allowed]
 
 
 def _build_top_curves_figure(curves: dict[str, pd.Series], benchmark_curve: pd.Series | None) -> go.Figure:
@@ -345,7 +435,11 @@ def main() -> None:
 
     config_path = Path(args.config_json)
     config = json.loads(config_path.read_text(encoding="utf-8-sig"))
-    daily_dir = Path(config.get("daily_dir", "data/upbit/daily"))
+    candle_dir = Path(config.get("candle_dir", config.get("daily_dir", "data/upbit/daily")))
+    timeframe = infer_timeframe(candle_dir, config.get("timeframe"))
+    periods_per_year = int(config.get("periods_per_year", infer_periods_per_year(timeframe)))
+    periods_per_day = periods_per_day_for_timeframe(timeframe)
+    pandas_freq = timeframe_to_pandas_freq(timeframe)
     out_dir = Path(config.get("out_dir", "data/grid/default"))
     out_dir.mkdir(parents=True, exist_ok=True)
     top_curve_count = int(config.get("top_curve_count", 5))
@@ -355,16 +449,17 @@ def main() -> None:
     rolling_ir_dir = out_dir / "rolling_ir"
     rolling_ir_dir.mkdir(parents=True, exist_ok=True)
 
-    candle_rows = load_all_candles(daily_dir)
+    candle_rows = load_all_candles(candle_dir)
     if not candle_rows:
-        raise SystemExit(f"No candle rows found in {daily_dir}")
+        raise SystemExit(f"No candle rows found in {candle_dir}")
 
     run_name_template = config.get("run_name_template", "run_{run_id}")
     raw_combinations = _grid_combinations(config.get("grid", {}))
     constraints = list(config.get("constraints", []))
     combinations = [combo for combo in raw_combinations if _passes_constraints(combo, constraints)]
     feature_cache: dict[str, list[dict[str, str]]] = {}
-    price_frame_cache: dict[str, pd.DataFrame] = {}
+    filtered_candle_cache: dict[tuple[str, ...], list] = {}
+    price_frame_cache: dict[tuple[str, tuple[str, ...]], pd.DataFrame] = {}
     result_rows: list[dict[str, Any]] = []
     run_payloads_by_name: dict[str, dict[str, Any]] = {}
 
@@ -380,15 +475,31 @@ def main() -> None:
         vectorbt_payload = rendered["vectorbt_payload"]
         run_payloads_by_name[context["run_name"]] = rendered
 
-        feature_specs = _load_feature_specs_from_payload(feature_payload)
-        feature_cache_key = json.dumps(feature_payload, sort_keys=True, ensure_ascii=False)
-        if feature_cache_key not in feature_cache:
-            feature_cache[feature_cache_key] = build_feature_table(candle_rows, feature_specs)
-        feature_rows = feature_cache[feature_cache_key]
-
         universe_spec = _load_universe_spec_from_payload(universe_payload)
         weight_spec = _load_weight_spec_from_payload(weight_payload)
         vectorbt_spec, benchmark_market = _load_vectorbt_spec_from_payload(vectorbt_payload)
+        vectorbt_spec = replace(vectorbt_spec, freq=pandas_freq)
+        required_markets = _required_markets_for_run(
+            feature_payload,
+            universe_payload,
+            benchmark_market,
+        )
+        if required_markets not in filtered_candle_cache:
+            filtered_candle_cache[required_markets] = _filter_candle_rows(candle_rows, required_markets)
+        run_candle_rows = filtered_candle_cache[required_markets]
+
+        feature_specs = _load_feature_specs_from_payload(feature_payload)
+        feature_cache_key = json.dumps(
+            {
+                "feature_payload": feature_payload,
+                "required_markets": required_markets,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+        if feature_cache_key not in feature_cache:
+            feature_cache[feature_cache_key] = build_feature_table(run_candle_rows, feature_specs)
+        feature_rows = feature_cache[feature_cache_key]
 
         universe_rows = build_universe_table(feature_rows, universe_spec)
         weight_rows = build_weight_table(universe_rows, weight_spec)
@@ -405,38 +516,57 @@ def main() -> None:
             print(f"[{run_idx}/{len(combinations)}] {context['run_name']}: empty weights")
             continue
 
-        if vectorbt_spec.price_column not in price_frame_cache:
-            price_frame_cache[vectorbt_spec.price_column] = build_price_frame(
-                candle_rows,
+        price_cache_key = (vectorbt_spec.price_column, required_markets)
+        if price_cache_key not in price_frame_cache:
+            price_frame_cache[price_cache_key] = build_price_frame(
+                run_candle_rows,
                 price_column=vectorbt_spec.price_column,
             )
-        price_frame = price_frame_cache[vectorbt_spec.price_column]
+        price_frame = price_frame_cache[price_cache_key]
         target_weight_frame = build_target_weight_frame(weight_rows, price_frame)
         portfolio = run_portfolio_from_target_weights(
             price_frame=price_frame,
             target_weight_frame=target_weight_frame,
             spec=vectorbt_spec,
         )
-        summary = portfolio.stats()
+        summary = portfolio.stats(settings={"freq": pandas_freq})
         benchmark_curve = build_benchmark_curve(price_frame, benchmark_market, vectorbt_spec.init_cash)
         equity_curve = portfolio.value()
         aligned_benchmark_curve = benchmark_curve.reindex(equity_curve.index).ffill()
         strategy_returns = compute_return_series(equity_curve)
         benchmark_returns = compute_return_series(aligned_benchmark_curve)
-        ir_stats = compute_information_ratio(strategy_returns, benchmark_returns)
+        ir_stats = compute_information_ratio(
+            strategy_returns,
+            benchmark_returns,
+            annualization_factor=periods_per_year,
+        )
         excess_returns, _ = compute_excess_curves(
             equity_curve,
             aligned_benchmark_curve,
             vectorbt_spec.init_cash,
         )
-        rolling_ir = compute_rolling_information_ratio(excess_returns, windows=rolling_ir_windows)
+        rolling_ir = compute_rolling_information_ratio(
+            excess_returns,
+            windows=rolling_ir_windows,
+            periods_per_day=periods_per_day,
+            annualization_factor=periods_per_year,
+        )
+        rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
         summary = pd.concat(
             [
                 summary,
-                benchmark_summary(aligned_benchmark_curve, vectorbt_spec.init_cash, benchmark_market),
+                benchmark_summary(
+                    aligned_benchmark_curve,
+                    vectorbt_spec.init_cash,
+                    benchmark_market,
+                    annualization_factor=periods_per_year,
+                ),
                 ir_stats,
+                rolling_ir_summary,
             ]
         )
+        summary.loc["Timeframe"] = timeframe
+        summary.loc["Periods Per Year"] = periods_per_year
 
         result_row["status"] = "ok"
         result_row.update(_preferred_summary_fields(summary))
@@ -459,6 +589,7 @@ def main() -> None:
         )
 
     result_frame = pd.DataFrame(result_rows)
+    result_frame = _attach_plateau_air_mean(result_frame, config.get("grid", {}))
     result_path = out_dir / "summary_results.csv"
     result_frame.to_csv(result_path, index=False, encoding="utf-8-sig")
     print(f"Wrote {len(result_rows)} grid result rows to {result_path}")
@@ -477,20 +608,37 @@ def main() -> None:
     for _, row in ok_frame.iterrows():
         run_name = str(row["run_name"])
         rendered = run_payloads_by_name[run_name]
+        vectorbt_spec, run_benchmark_market = _load_vectorbt_spec_from_payload(rendered["vectorbt_payload"])
+        vectorbt_spec = replace(vectorbt_spec, freq=pandas_freq)
+        required_markets = _required_markets_for_run(
+            rendered["feature_payload"],
+            rendered["universe_payload"],
+            run_benchmark_market,
+        )
         feature_specs = _load_feature_specs_from_payload(rendered["feature_payload"])
-        feature_cache_key = json.dumps(rendered["feature_payload"], sort_keys=True, ensure_ascii=False)
+        feature_cache_key = json.dumps(
+            {
+                "feature_payload": rendered["feature_payload"],
+                "required_markets": required_markets,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
         feature_rows = feature_cache[feature_cache_key]
         universe_spec = _load_universe_spec_from_payload(rendered["universe_payload"])
         weight_spec = _load_weight_spec_from_payload(rendered["weight_payload"])
-        vectorbt_spec, run_benchmark_market = _load_vectorbt_spec_from_payload(rendered["vectorbt_payload"])
         universe_rows = build_universe_table(feature_rows, universe_spec)
         weight_rows = build_weight_table(universe_rows, weight_spec)
-        if vectorbt_spec.price_column not in price_frame_cache:
-            price_frame_cache[vectorbt_spec.price_column] = build_price_frame(
-                candle_rows,
+        if required_markets not in filtered_candle_cache:
+            filtered_candle_cache[required_markets] = _filter_candle_rows(candle_rows, required_markets)
+        run_candle_rows = filtered_candle_cache[required_markets]
+        price_cache_key = (vectorbt_spec.price_column, required_markets)
+        if price_cache_key not in price_frame_cache:
+            price_frame_cache[price_cache_key] = build_price_frame(
+                run_candle_rows,
                 price_column=vectorbt_spec.price_column,
             )
-        price_frame = price_frame_cache[vectorbt_spec.price_column]
+        price_frame = price_frame_cache[price_cache_key]
         target_weight_frame = build_target_weight_frame(weight_rows, price_frame)
         portfolio = run_portfolio_from_target_weights(
             price_frame=price_frame,

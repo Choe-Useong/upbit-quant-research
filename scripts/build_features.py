@@ -24,9 +24,15 @@ from lib.storage import read_candles_csv, write_table_csv
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Build feature table CSV from daily candle CSV files and a JSON feature spec."
+        description="Build feature table CSV from candle CSV files and a JSON feature spec."
     )
-    parser.add_argument("--daily-dir", default="data/upbit/daily", help="Directory containing candle CSVs")
+    parser.add_argument(
+        "--candle-dir",
+        "--daily-dir",
+        dest="candle_dir",
+        default="data/upbit/daily",
+        help="Directory containing per-market candle CSV files",
+    )
     parser.add_argument("--spec-json", required=True, help="JSON file containing feature spec list")
     parser.add_argument("--output-csv", default="data/upbit/features/features.csv", help="Output feature CSV path")
     return parser
@@ -81,9 +87,9 @@ def load_feature_specs(path: Path) -> list[FeatureSpec]:
     return specs
 
 
-def load_all_candles(daily_dir: Path) -> list:
+def load_all_candles(candle_dir: Path) -> list:
     rows = []
-    for csv_path in sorted(daily_dir.glob("*.csv")):
+    for csv_path in sorted(candle_dir.glob("*.csv")):
         rows.extend(read_candles_csv(csv_path))
     return rows
 
@@ -92,9 +98,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    candle_rows = load_all_candles(Path(args.daily_dir))
+    candle_rows = load_all_candles(Path(args.candle_dir))
     if not candle_rows:
-        raise SystemExit(f"No candle rows found in {args.daily_dir}")
+        raise SystemExit(f"No candle rows found in {args.candle_dir}")
 
     feature_specs = load_feature_specs(Path(args.spec_json))
     feature_rows = build_feature_table(candle_rows, feature_specs)

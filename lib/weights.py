@@ -7,7 +7,7 @@ from typing import Iterable
 
 
 WEIGHTING_METHODS = {"equal", "rank"}
-REBALANCE_FREQUENCIES = {"daily", "weekly", "monthly"}
+REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,9 @@ def _period_key(date_utc: str, frequency: str) -> tuple[int, ...]:
 
 
 def _selected_rebalance_dates(rows: list[dict[str, str]], frequency: str) -> set[str]:
+    if frequency == "every_bar":
+        return {row["date_utc"] for row in rows}
+
     chosen: dict[tuple[int, ...], str] = {}
     for row in rows:
         date_utc = row["date_utc"]

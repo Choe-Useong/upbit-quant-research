@@ -1,0 +1,23 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "volatility",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "vol_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

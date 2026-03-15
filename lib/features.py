@@ -444,7 +444,13 @@ def transform_volatility(
     params: dict[str, int | float | str],
 ) -> list[float | None]:
     window = int(params["window"])
-    return _apply_by_market(rows, values, lambda group, _: _rolling_std(group, window), params)
+
+    def group_volatility(group: list[float | None], _: dict[str, int | float | str]) -> list[float | None]:
+        # Use return-based volatility so assets with different price levels remain comparable.
+        returns = _log_return(group, 1)
+        return _rolling_std(returns, window)
+
+    return _apply_by_market(rows, values, group_volatility, params)
 
 
 def transform_cross_rank(

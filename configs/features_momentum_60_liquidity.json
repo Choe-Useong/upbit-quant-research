@@ -1,0 +1,53 @@
+[
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 60
+        }
+      }
+    ],
+    "column_name": "mom_60"
+  },
+  {
+    "source": "candle_acc_trade_price",
+    "steps": [
+      {
+        "kind": "rolling_mean",
+        "params": {
+          "window": 20
+        }
+      }
+    ],
+    "column_name": "traded_value_mean_20"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 60
+        }
+      },
+      {
+        "kind": "cross_rank",
+        "params": {
+          "descending": true
+        }
+      }
+    ],
+    "column_name": "mom_60_rank"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

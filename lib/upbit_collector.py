@@ -112,6 +112,43 @@ def fetch_daily_candle_batch(
     return rows
 
 
+def fetch_minute_candle_batch(
+    market: Market,
+    unit: int,
+    count: int,
+    to: str | None = None,
+) -> list[CandleRow]:
+    params: dict[str, object] = {"market": market.market, "count": count}
+    if to:
+        params["to"] = to
+
+    try:
+        payload = request_json(f"/v1/candles/minutes/{unit}", params)
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"{market.market}: HTTP {exc.code}") from exc
+
+    rows = [
+        CandleRow(
+            market=market.market,
+            korean_name=market.korean_name,
+            english_name=market.english_name,
+            market_warning=market.market_warning,
+            date_utc=str(item["candle_date_time_utc"]),
+            date_kst=str(item["candle_date_time_kst"]),
+            opening_price=float(item["opening_price"]),
+            high_price=float(item["high_price"]),
+            low_price=float(item["low_price"]),
+            trade_price=float(item["trade_price"]),
+            candle_acc_trade_volume=float(item["candle_acc_trade_volume"]),
+            candle_acc_trade_price=float(item["candle_acc_trade_price"]),
+            timestamp=None if item.get("timestamp") is None else int(item["timestamp"]),
+        )
+        for item in payload
+    ]
+    rows.sort(key=lambda row: row.date_utc)
+    return rows
+
+
 def iter_daily_candle_batches(
     market: Market,
     days: int | None = None,
@@ -147,11 +184,68 @@ def collect_daily_candles(
     batch_size: int = DEFAULT_BATCH_SIZE,
     pause_seconds: float = DEFAULT_PAUSE_SECONDS,
     to: str | None = None,
-) -> list[CandleRow]:
+    ) -> list[CandleRow]:
     rows: list[CandleRow] = []
     for batch in iter_daily_candle_batches(
         market=market,
         days=days,
+        batch_size=batch_size,
+        pause_seconds=pause_seconds,
+        to=to,
+    ):
+        rows.extend(batch)
+    rows.sort(key=lambda row: row.date_utc)
+    return rows
+
+
+def iter_minute_candle_batches(
+    market: Market,
+    unit: int,
+    candles: int | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    pause_seconds: float = DEFAULT_PAUSE_SECONDS,
+    to: str | None = None,
+) -> Iterator[list[CandleRow]]:
+    remaining = candles
+    cursor = to
+
+    while remaining is None or remaining > 0:
+        request_count = batch_size if remaining is None else min(batch_size, remaining)
+        batch = fetch_minute_candle_batch(
+            market=market,
+            unit=unit,
+            count=request_count,
+            to=cursor,
+        )
+        if not batch:
+            break
+
+        yield batch
+
+        if remaining is not None:
+            remaining -= len(batch)
+
+        oldest_dt = datetime.strptime(batch[0].date_utc, "%Y-%m-%dT%H:%M:%S").replace(tzinfo=UTC)
+        cursor = (oldest_dt - timedelta(seconds=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+        if len(batch) < request_count:
+            break
+        time.sleep(pause_seconds)
+
+
+def collect_minute_candles(
+    market: Market,
+    unit: int,
+    candles: int | None = None,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    pause_seconds: float = DEFAULT_PAUSE_SECONDS,
+    to: str | None = None,
+) -> list[CandleRow]:
+    rows: list[CandleRow] = []
+    for batch in iter_minute_candle_batches(
+        market=market,
+        unit=unit,
+        candles=candles,
         batch_size=batch_size,
         pause_seconds=pause_seconds,
         to=to,

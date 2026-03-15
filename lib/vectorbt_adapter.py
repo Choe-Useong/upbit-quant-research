@@ -18,6 +18,7 @@ class VectorBTSpec:
     group_by: bool = True
     size_type: str = "targetpercent"
     call_seq: str = "auto"
+    freq: str | None = None
 
 
 def _price_value(row: CandleRow, price_column: str) -> float:
@@ -86,11 +87,13 @@ def build_target_weight_frame(
 
 def _scheduled_rebalance_dates(index: pd.Index, rebalance_frequency: str) -> list[str]:
     timestamps = [pd.Timestamp(value) for value in index]
-    if rebalance_frequency == "daily":
+    if rebalance_frequency == "every_bar":
         return [timestamp.isoformat() for timestamp in timestamps]
 
     keys: list[tuple[int, ...]] = []
-    if rebalance_frequency == "weekly":
+    if rebalance_frequency == "daily":
+        keys = [(timestamp.year, timestamp.month, timestamp.day) for timestamp in timestamps]
+    elif rebalance_frequency == "weekly":
         keys = [timestamp.isocalendar()[:2] for timestamp in timestamps]
     elif rebalance_frequency == "monthly":
         keys = [(timestamp.year, timestamp.month) for timestamp in timestamps]
@@ -136,4 +139,5 @@ def run_portfolio_from_target_weights(
         cash_sharing=spec.cash_sharing,
         group_by=True if spec.group_by else False,
         call_seq=spec.call_seq,
+        freq=spec.freq,
     )

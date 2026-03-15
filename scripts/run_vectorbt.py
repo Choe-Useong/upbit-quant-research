@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import math
+import re
 import sys
 import webbrowser
 from pathlib import Path
@@ -24,12 +26,14 @@ from lib.vectorbt_adapter import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run vectorbt portfolio simulation from daily candle CSVs and target weight CSV."
+        description="Run vectorbt portfolio simulation from candle CSVs and target weight CSV."
     )
     parser.add_argument(
+        "--candle-dir",
         "--daily-dir",
+        dest="candle_dir",
         default="data/upbit/daily",
-        help="Directory containing per-market daily candle CSV files",
+        help="Directory containing per-market candle CSV files",
     )
     parser.add_argument(
         "--weights-csv",
@@ -79,12 +83,23 @@ def build_parser() -> argparse.ArgumentParser:
         default="KRW-BTC",
         help="Market to use for buy-and-hold benchmark",
     )
+    parser.add_argument(
+        "--timeframe",
+        default=None,
+        help="Timeframe label such as daily, 240m, or 60m; omitted means infer from candle-dir",
+    )
+    parser.add_argument(
+        "--periods-per-year",
+        type=int,
+        default=None,
+        help="Annualization periods per year; omitted means infer from timeframe",
+    )
     return parser
 
 
-def load_all_candles(daily_dir: Path) -> list:
+def load_all_candles(candle_dir: Path) -> list:
     rows = []
-    for csv_path in sorted(daily_dir.glob("*.csv")):
+    for csv_path in sorted(candle_dir.glob("*.csv")):
         rows.extend(read_candles_csv(csv_path))
     return rows
 
@@ -131,6 +146,49 @@ def print_summary(summary: pd.Series) -> None:
             print(f"{key}: {summary[key]}")
 
 
+def infer_timeframe(candle_dir: Path, timeframe: str | None = None) -> str:
+    if timeframe:
+        return timeframe.lower()
+
+    parts = [part.lower() for part in candle_dir.parts]
+    if "daily" in parts:
+        return "daily"
+
+    for idx, part in enumerate(parts):
+        if part == "minutes" and idx + 1 < len(parts) and parts[idx + 1].isdigit():
+            return f"{parts[idx + 1]}m"
+
+    return "daily"
+
+
+def periods_per_day_for_timeframe(timeframe: str) -> int:
+    normalized = timeframe.lower()
+    if normalized == "daily":
+        return 1
+    matched = re.fullmatch(r"(\d+)m", normalized)
+    if not matched:
+        raise ValueError(f"Unsupported timeframe: {timeframe}")
+    minutes = int(matched.group(1))
+    if minutes <= 0 or 1440 % minutes != 0:
+        raise ValueError(f"Unsupported minute timeframe: {timeframe}")
+    return 1440 // minutes
+
+
+def infer_periods_per_year(timeframe: str) -> int:
+    return 252 * periods_per_day_for_timeframe(timeframe)
+
+
+def timeframe_to_pandas_freq(timeframe: str) -> str:
+    normalized = timeframe.lower()
+    if normalized == "daily":
+        return "1D"
+    matched = re.fullmatch(r"(\d+)m", normalized)
+    if not matched:
+        raise ValueError(f"Unsupported timeframe: {timeframe}")
+    minutes = int(matched.group(1))
+    return f"{minutes}min"
+
+
 def build_benchmark_curve(
     price_frame: pd.DataFrame,
     benchmark_market: str,
@@ -151,14 +209,15 @@ def benchmark_summary(
     benchmark_curve: pd.Series,
     init_cash: float,
     benchmark_market: str,
+    annualization_factor: int = 252,
 ) -> pd.Series:
     end_value = float(benchmark_curve.iloc[-1])
     total_return = ((end_value / init_cash) - 1.0) * 100.0
     returns = compute_return_series(benchmark_curve)
     max_drawdown_pct = compute_max_drawdown_pct(benchmark_curve)
-    sharpe_ratio = compute_sharpe_ratio(returns)
-    sortino_ratio = compute_sortino_ratio(returns)
-    annualized_return = compute_annualized_return(benchmark_curve)
+    sharpe_ratio = compute_sharpe_ratio(returns, annualization_factor=annualization_factor)
+    sortino_ratio = compute_sortino_ratio(returns, annualization_factor=annualization_factor)
+    annualized_return = compute_annualized_return(benchmark_curve, annualization_factor=annualization_factor)
     calmar_ratio = float("nan")
     if max_drawdown_pct != 0:
         calmar_ratio = annualized_return / (abs(max_drawdown_pct) / 100.0)
@@ -266,14 +325,41 @@ def compute_excess_curves(
 def compute_rolling_information_ratio(
     excess_returns: pd.Series,
     windows: tuple[int, ...] = (126, 252),
+    periods_per_day: int = 1,
+    annualization_factor: int = 252,
 ) -> pd.DataFrame:
     frame = pd.DataFrame(index=excess_returns.index)
-    for window in windows:
-        rolling_mean = excess_returns.rolling(window).mean()
-        rolling_std = excess_returns.rolling(window).std(ddof=0)
+    for window_days in windows:
+        window_periods = max(1, int(math.ceil(window_days * periods_per_day)))
+        rolling_mean = excess_returns.rolling(window_periods).mean()
+        rolling_std = excess_returns.rolling(window_periods).std(ddof=0)
         rolling_ir = rolling_mean / rolling_std
-        frame[f"rolling_ir_{window}d"] = rolling_ir * (252 ** 0.5)
+        frame[f"rolling_ir_{window_days}d"] = rolling_ir * (annualization_factor ** 0.5)
     return frame
+
+
+def summarize_rolling_information_ratio(rolling_ir: pd.DataFrame) -> pd.Series:
+    summary: dict[str, float] = {}
+    for column in rolling_ir.columns:
+        series = pd.to_numeric(rolling_ir[column], errors="coerce").dropna()
+        label = column.replace("rolling_ir_", "Rolling IR ").replace("d", "d")
+        if series.empty:
+            summary[f"{label} Mean"] = float("nan")
+            summary[f"{label} Std"] = float("nan")
+            summary[f"{label} Median"] = float("nan")
+            summary[f"{label} Q25"] = float("nan")
+            summary[f"{label} Positive Ratio"] = float("nan")
+            summary[f"{label} Min"] = float("nan")
+            summary[f"{label} Max"] = float("nan")
+            continue
+        summary[f"{label} Mean"] = float(series.mean())
+        summary[f"{label} Std"] = float(series.std(ddof=0))
+        summary[f"{label} Median"] = float(series.median())
+        summary[f"{label} Q25"] = float(series.quantile(0.25))
+        summary[f"{label} Positive Ratio"] = float((series > 0).mean())
+        summary[f"{label} Min"] = float(series.min())
+        summary[f"{label} Max"] = float(series.max())
+    return pd.Series(summary)
 
 
 def _as_single_series(curve, label: str) -> pd.Series:
@@ -331,9 +417,14 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    candle_rows = load_all_candles(Path(args.daily_dir))
+    candle_rows = load_all_candles(Path(args.candle_dir))
     if not candle_rows:
-        raise SystemExit(f"No candle rows found in {args.daily_dir}")
+        raise SystemExit(f"No candle rows found in {args.candle_dir}")
+
+    timeframe = infer_timeframe(Path(args.candle_dir), args.timeframe)
+    periods_per_year = args.periods_per_year or infer_periods_per_year(timeframe)
+    periods_per_day = periods_per_day_for_timeframe(timeframe)
+    pandas_freq = timeframe_to_pandas_freq(timeframe)
 
     weight_rows = read_table_csv(Path(args.weights_csv))
     if not weight_rows:
@@ -349,25 +440,42 @@ def main() -> None:
             init_cash=args.init_cash,
             fees=args.fees,
             slippage=args.slippage,
+            freq=pandas_freq,
         ),
     )
 
     out_dir = Path(args.out_dir)
-    summary = portfolio.stats()
+    summary = portfolio.stats(settings={"freq": pandas_freq})
     equity_curve = portfolio.value()
     benchmark_curve = build_benchmark_curve(price_frame, args.benchmark_market, args.init_cash)
-    benchmark_stats = benchmark_summary(benchmark_curve, args.init_cash, args.benchmark_market)
+    benchmark_stats = benchmark_summary(
+        benchmark_curve,
+        args.init_cash,
+        args.benchmark_market,
+        annualization_factor=periods_per_year,
+    )
     aligned_benchmark_curve = benchmark_curve.reindex(equity_curve.index).ffill()
     strategy_returns = compute_return_series(equity_curve)
     benchmark_returns = compute_return_series(aligned_benchmark_curve)
-    ir_stats = compute_information_ratio(strategy_returns, benchmark_returns)
+    ir_stats = compute_information_ratio(
+        strategy_returns,
+        benchmark_returns,
+        annualization_factor=periods_per_year,
+    )
     excess_returns, excess_equity_curve = compute_excess_curves(
         equity_curve,
         aligned_benchmark_curve,
         args.init_cash,
     )
-    rolling_ir = compute_rolling_information_ratio(excess_returns)
-    summary = pd.concat([summary, benchmark_stats, ir_stats])
+    rolling_ir = compute_rolling_information_ratio(
+        excess_returns,
+        periods_per_day=periods_per_day,
+        annualization_factor=periods_per_year,
+    )
+    rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
+    summary.loc["Timeframe"] = timeframe
+    summary.loc["Periods Per Year"] = periods_per_year
+    summary = pd.concat([summary, benchmark_stats, ir_stats, rolling_ir_summary])
     print_summary(summary)
     write_summary_csv(out_dir / "summary.csv", summary)
     write_equity_csv(out_dir / "equity_curve.csv", equity_curve)
