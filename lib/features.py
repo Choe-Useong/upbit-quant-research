@@ -268,6 +268,43 @@ def _rolling_sum(values: Sequence[float | None], window: int) -> list[float | No
     return result
 
 
+def _rolling_vwma(
+    prices: Sequence[float | None],
+    volumes: Sequence[float | None],
+    window: int,
+) -> list[float | None]:
+    if len(prices) != len(volumes):
+        raise ValueError("VWMA price and volume lengths must match")
+
+    result: list[float | None] = []
+    weighted_sum = 0.0
+    volume_sum = 0.0
+    missing = 0
+
+    for idx, (price, volume) in enumerate(zip(prices, volumes)):
+        if price is None or volume is None:
+            missing += 1
+        else:
+            weighted_sum += price * volume
+            volume_sum += volume
+
+        if idx >= window:
+            old_price = prices[idx - window]
+            old_volume = volumes[idx - window]
+            if old_price is None or old_volume is None:
+                missing -= 1
+            else:
+                weighted_sum -= old_price * old_volume
+                volume_sum -= old_volume
+
+        if idx + 1 < window or missing > 0 or volume_sum == 0:
+            result.append(None)
+        else:
+            result.append(weighted_sum / volume_sum)
+
+    return result
+
+
 def _rolling_std(values: Sequence[float | None], window: int) -> list[float | None]:
     result: list[float | None] = []
     for idx in range(len(values)):
@@ -438,6 +475,27 @@ def transform_rolling_sum(
     return _apply_by_market(rows, values, lambda group, _: _rolling_sum(group, window), params)
 
 
+def transform_vwma(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    volume_column = str(params.get("volume_column", "candle_acc_trade_volume"))
+    volume_values = _values_from_column(rows, volume_column)
+
+    result: list[float | None] = [None] * len(rows)
+    for indexes in _market_groups(rows):
+        market_prices = [values[idx] for idx in indexes]
+        market_volumes = [volume_values[idx] for idx in indexes]
+        transformed = _rolling_vwma(market_prices, market_volumes, window)
+        if len(transformed) != len(indexes):
+            raise ValueError("Transform length mismatch in market scope")
+        for idx, value in zip(indexes, transformed):
+            result[idx] = value
+    return result
+
+
 def transform_volatility(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -594,6 +652,7 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "simple_return": transform_simple_return,
     "rolling_mean": transform_rolling_mean,
     "rolling_sum": transform_rolling_sum,
+    "vwma": transform_vwma,
     "volatility": transform_volatility,
     "cross_rank": transform_cross_rank,
     "cross_percentile": transform_cross_percentile,
