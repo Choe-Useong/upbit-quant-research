@@ -1,6 +1,6 @@
-# Coin Project
+# Upbit Quant Research
 
-Upbit KRW market quant research pipeline.
+Quant research framework for Upbit KRW crypto data, features, universes, vectorbt backtests, and parameter grids.
 
 Current scope:
 - collect Upbit daily candles
