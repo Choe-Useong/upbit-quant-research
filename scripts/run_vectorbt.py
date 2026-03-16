@@ -132,6 +132,8 @@ def print_summary(summary: pd.Series) -> None:
         "End Value",
         "Total Return [%]",
         "CAGR [%]",
+        "Longest Peak-to-Recovery Bars",
+        "Second Longest Peak-to-Recovery Bars",
         "Benchmark Return [%]",
         "Benchmark Market",
         "Benchmark Start Value",
@@ -149,6 +151,11 @@ def print_summary(summary: pd.Series) -> None:
         "Recent 1Y Information Ratio",
         "Recent 1Y AIR",
         "Recent 1Y Max Drawdown [%]",
+        "Recent 2Y Return [%]",
+        "Recent 2Y Benchmark Return [%]",
+        "Recent 2Y Information Ratio",
+        "Recent 2Y AIR",
+        "Recent 2Y Max Drawdown [%]",
         "Max Drawdown [%]",
         "Sharpe Ratio",
         "Calmar Ratio",
@@ -262,6 +269,62 @@ def compute_max_drawdown_pct(curve: pd.Series) -> float:
     running_max = curve.cummax()
     drawdown = (curve / running_max) - 1.0
     return float(drawdown.min() * 100.0)
+
+
+def compute_drawdown_recovery_stats(curve: pd.Series) -> pd.Series:
+    series = curve.dropna()
+    if series.empty:
+        return pd.Series(
+            {
+                "Longest Peak-to-Recovery Bars": float("nan"),
+                "Second Longest Peak-to-Recovery Bars": float("nan"),
+            }
+        )
+
+    running_max = float(series.iloc[0])
+    running_max_time = pd.Timestamp(series.index[0])
+    in_drawdown = False
+    trough_value = float(series.iloc[0])
+    peak_to_recovery_bars_list: list[int] = []
+
+    for timestamp, value in series.items():
+        current_time = pd.Timestamp(timestamp)
+        current_value = float(value)
+
+        if current_value >= running_max:
+            if in_drawdown:
+                peak_to_recovery_bars = int(series.loc[running_max_time:current_time].shape[0] - 1)
+                if peak_to_recovery_bars > 0:
+                    peak_to_recovery_bars_list.append(peak_to_recovery_bars)
+                in_drawdown = False
+
+            running_max = current_value
+            running_max_time = current_time
+            trough_value = current_value
+            continue
+
+        if not in_drawdown:
+            in_drawdown = True
+            trough_value = current_value
+            continue
+
+        if current_value < trough_value:
+            trough_value = current_value
+
+    peak_to_recovery_bars_list.sort(reverse=True)
+    longest = float("nan")
+    second_longest = float("nan")
+    if peak_to_recovery_bars_list:
+        longest = float(peak_to_recovery_bars_list[0])
+    if len(peak_to_recovery_bars_list) >= 2:
+        second_longest = float(peak_to_recovery_bars_list[1])
+
+    return pd.Series(
+        {
+            "Longest Peak-to-Recovery Bars": longest,
+            "Second Longest Peak-to-Recovery Bars": second_longest,
+        }
+    )
 
 
 def compute_sharpe_ratio(returns: pd.Series, annualization_factor: int = 252) -> float:
@@ -403,6 +466,58 @@ def compute_recent_1y_stats(
             "Recent 1Y Information Ratio": recent_ir["Information Ratio"],
             "Recent 1Y AIR": recent_ir["Annualized Information Ratio"],
             "Recent 1Y Max Drawdown [%]": compute_max_drawdown_pct(recent_equity),
+        }
+    )
+
+
+def compute_recent_2y_stats(
+    equity_curve: pd.Series,
+    benchmark_curve: pd.Series,
+    annualization_factor: int = 252,
+) -> pd.Series:
+    empty_result = pd.Series(
+        {
+            "Recent 2Y Return [%]": float("nan"),
+            "Recent 2Y Benchmark Return [%]": float("nan"),
+            "Recent 2Y Information Ratio": float("nan"),
+            "Recent 2Y AIR": float("nan"),
+            "Recent 2Y Max Drawdown [%]": float("nan"),
+        }
+    )
+    if equity_curve.empty or benchmark_curve.empty:
+        return empty_result
+
+    last_timestamp = pd.Timestamp(equity_curve.index[-1])
+    start_timestamp = last_timestamp - pd.DateOffset(years=2)
+    aligned = pd.concat(
+        [
+            equity_curve[equity_curve.index >= start_timestamp].rename("strategy"),
+            benchmark_curve[benchmark_curve.index >= start_timestamp].rename("benchmark"),
+        ],
+        axis=1,
+        join="inner",
+    ).dropna()
+    if len(aligned) < 2:
+        return empty_result
+
+    recent_equity = aligned["strategy"]
+    recent_benchmark = aligned["benchmark"]
+    recent_return = ((float(recent_equity.iloc[-1] / recent_equity.iloc[0])) - 1.0) * 100.0
+    recent_benchmark_return = (
+        (float(recent_benchmark.iloc[-1] / recent_benchmark.iloc[0])) - 1.0
+    ) * 100.0
+    recent_ir = compute_information_ratio(
+        compute_return_series(recent_equity),
+        compute_return_series(recent_benchmark),
+        annualization_factor=annualization_factor,
+    )
+    return pd.Series(
+        {
+            "Recent 2Y Return [%]": recent_return,
+            "Recent 2Y Benchmark Return [%]": recent_benchmark_return,
+            "Recent 2Y Information Ratio": recent_ir["Information Ratio"],
+            "Recent 2Y AIR": recent_ir["Annualized Information Ratio"],
+            "Recent 2Y Max Drawdown [%]": compute_max_drawdown_pct(recent_equity),
         }
     )
 
@@ -553,6 +668,11 @@ def main() -> None:
         aligned_benchmark_curve,
         annualization_factor=periods_per_year,
     )
+    recent_2y_stats = compute_recent_2y_stats(
+        equity_curve,
+        aligned_benchmark_curve,
+        annualization_factor=periods_per_year,
+    )
     rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
     summary.loc["CAGR [%]"] = compute_annualized_return(
         equity_curve,
@@ -575,6 +695,8 @@ def main() -> None:
             benchmark_stats,
             ir_stats,
             recent_1y_stats,
+            recent_2y_stats,
+            compute_drawdown_recovery_stats(equity_curve),
             rolling_ir_summary,
         ]
     )

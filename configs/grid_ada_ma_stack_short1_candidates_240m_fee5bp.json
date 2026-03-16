@@ -3,12 +3,14 @@
   "timeframe": "240m",
   "out_dir": "data/grid/ada_ma_stack_short1_candidates_240m_fee5bp",
   "run_name_template": "ada_ma_stack_240m_{short}_{mid}_{long}_every_bar_fee5bp",
+  "compute_rolling_ir": false,
   "rolling_ir_windows": [
     126,
     252
   ],
-  "save_rolling_ir_plots": true,
-  "top_curve_count": 5,
+  "save_summary_plots": false,
+  "save_rolling_ir_plots": false,
+  "top_curve_count": 0,
   "ranking_metric": "Total Return [%]",
   "feature_spec_template": [
     {

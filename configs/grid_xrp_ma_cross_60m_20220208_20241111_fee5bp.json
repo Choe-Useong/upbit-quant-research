@@ -1,13 +1,9 @@
 {
-  "candle_dir": "data/upbit/minutes/60",
+  "candle_dir": "data/upbit/minutes/60_xrp_20220208_20241111",
   "timeframe": "60m",
-  "out_dir": "data/grid/ada_ma_cross_60m_fee5bp",
-  "run_name_template": "ada_ma_60m_{short}_{long}_{rebalance_frequency}_fee5bp",
+  "out_dir": "data/grid/xrp_ma_cross_60m_20220208_20241111_fee5bp",
+  "run_name_template": "xrp_ma_60m_{short}_{long}_{rebalance_frequency}_fee5bp",
   "compute_rolling_ir": false,
-  "rolling_ir_windows": [
-    126,
-    252
-  ],
   "save_summary_plots": false,
   "save_rolling_ir_plots": false,
   "top_curve_count": 0,
@@ -54,7 +50,7 @@
     "top_n": 1,
     "ascending": false,
     "allowed_markets": [
-      "KRW-ADA"
+      "KRW-XRP"
     ],
     "value_filters": [
       {
@@ -75,7 +71,7 @@
     "init_cash": 1000000.0,
     "fees": 0.0005,
     "slippage": 0.0,
-    "benchmark_market": "KRW-ADA"
+    "benchmark_market": "KRW-XRP"
   },
   "grid": {
     "short": [
@@ -84,8 +80,7 @@
       5,
       10,
       20,
-      30
-      ,
+      30,
       60
     ],
     "long": [

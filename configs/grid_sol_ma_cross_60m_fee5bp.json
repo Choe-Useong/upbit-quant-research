@@ -3,13 +3,14 @@
   "timeframe": "60m",
   "out_dir": "data/grid/sol_ma_cross_60m_fee5bp",
   "run_name_template": "sol_ma_60m_{short}_{long}_{rebalance_frequency}_fee5bp",
+  "compute_rolling_ir": false,
   "rolling_ir_windows": [
     126,
     252
   ],
   "save_summary_plots": false,
   "save_rolling_ir_plots": false,
-  "top_curve_count": 5,
+  "top_curve_count": 0,
   "ranking_metric": "Total Return [%]",
   "feature_spec_template": [
     {

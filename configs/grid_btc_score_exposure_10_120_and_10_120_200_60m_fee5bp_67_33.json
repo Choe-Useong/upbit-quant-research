@@ -1,16 +1,12 @@
 {
   "candle_dir": "data/upbit/minutes/60",
   "timeframe": "60m",
-  "out_dir": "data/grid/btc_ma_stack_candidates_60m_fee5bp",
-  "run_name_template": "btc_ma_stack_60m_{short}_{mid}_{long}_every_bar_fee5bp",
+  "out_dir": "data/grid/btc_score_exposure_10_120_and_10_120_200_60m_fee5bp_67_33",
+  "run_name_template": "btc_score_exposure_10_120_and_10_120_200_67_33_every_bar_fee5bp",
   "compute_rolling_ir": false,
-  "rolling_ir_windows": [
-    126,
-    252
-  ],
   "save_summary_plots": false,
   "save_rolling_ir_plots": false,
-  "top_curve_count": 0,
+  "top_curve_count": 1,
   "ranking_metric": "Total Return [%]",
   "feature_spec_template": [
     {
@@ -19,11 +15,11 @@
         {
           "kind": "rolling_mean",
           "params": {
-            "window": "{short}"
+            "window": 10
           }
         }
       ],
-      "column_name": "sma_{short}"
+      "column_name": "sma_10"
     },
     {
       "source": "trade_price",
@@ -31,11 +27,11 @@
         {
           "kind": "rolling_mean",
           "params": {
-            "window": "{mid}"
+            "window": 120
           }
         }
       ],
-      "column_name": "sma_{mid}"
+      "column_name": "sma_120"
     },
     {
       "source": "trade_price",
@@ -43,42 +39,56 @@
         {
           "kind": "rolling_mean",
           "params": {
-            "window": "{long}"
+            "window": 200
           }
         }
       ],
-      "column_name": "sma_{long}"
+      "column_name": "sma_200"
     },
     {
       "compare": {
-        "left_feature": "sma_{short}",
+        "left_feature": "sma_10",
         "operator": "gt",
-        "right_feature": "sma_{mid}"
+        "right_feature": "sma_120"
       },
-      "column_name": "sma{short}_gt_sma{mid}"
+      "column_name": "sma10_gt_sma120"
     },
     {
       "compare": {
-        "left_feature": "sma_{mid}",
+        "left_feature": "sma_120",
         "operator": "gt",
-        "right_feature": "sma_{long}"
+        "right_feature": "sma_200"
       },
-      "column_name": "sma{mid}_gt_sma{long}"
+      "column_name": "sma120_gt_sma200"
     },
     {
       "logical": {
         "operator": "and",
         "features": [
-          "sma{short}_gt_sma{mid}",
-          "sma{mid}_gt_sma{long}"
+          "sma10_gt_sma120",
+          "sma120_gt_sma200"
         ]
       },
-      "column_name": "ma_stack_{short}_{mid}_{long}"
+      "column_name": "ma_stack_10_120_200"
+    },
+    {
+      "components": [
+        {
+          "feature_column": "sma10_gt_sma120",
+          "weight": 0.67
+        },
+        {
+          "feature_column": "ma_stack_10_120_200",
+          "weight": 0.33
+        }
+      ],
+      "combine": "weighted_sum",
+      "column_name": "exposure_score"
     }
   ],
   "universe_spec_template": {
     "name": "{run_name}",
-    "feature_column": "ma_stack_{short}_{mid}_{long}",
+    "feature_column": "exposure_score",
     "lag": 1,
     "mode": "top_n",
     "top_n": 1,
@@ -88,7 +98,7 @@
     ],
     "value_filters": [
       {
-        "feature_column": "ma_stack_{short}_{mid}_{long}",
+        "feature_column": "exposure_score",
         "operator": "gt",
         "value": 0.0,
         "lag": 1
@@ -96,9 +106,12 @@
     ]
   },
   "weight_spec_template": {
-    "weighting": "equal",
+    "weighting": "feature_value",
     "gross_exposure": 1.0,
-    "rebalance_frequency": "every_bar"
+    "rebalance_frequency": "every_bar",
+    "feature_value_scale": 1.0,
+    "feature_value_clip_min": 0.0,
+    "feature_value_clip_max": 1.0
   },
   "vectorbt_spec_template": {
     "price_column": "trade_price",
@@ -108,22 +121,8 @@
     "benchmark_market": "KRW-BTC"
   },
   "grid": {
-    "short": [
-      5,
-      10,
-      20
-    ],
-    "mid": [
-      60,
-      120
-    ],
-    "long": [
-      120,
-      200,
-      400
+    "dummy": [
+      1
     ]
-  },
-  "constraints": [
-    "short < mid < long"
-  ]
+  }
 }

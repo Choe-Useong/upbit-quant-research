@@ -246,6 +246,32 @@ def _rolling_mean(values: Sequence[float | None], window: int) -> list[float | N
     return result
 
 
+def _ewma(values: Sequence[float | None], window: int) -> list[float | None]:
+    if window <= 0:
+        raise ValueError("window must be positive")
+
+    result: list[float | None] = [None] * len(values)
+    if len(values) < window:
+        return result
+
+    seed = values[:window]
+    if any(value is None for value in seed):
+        return result
+
+    alpha = 2.0 / (window + 1.0)
+    current = sum(float(value) for value in seed if value is not None) / window
+    result[window - 1] = current
+
+    for idx in range(window, len(values)):
+        value = values[idx]
+        if value is None:
+            result[idx] = None
+            continue
+        current = (alpha * float(value)) + ((1.0 - alpha) * current)
+        result[idx] = current
+    return result
+
+
 def _rolling_sum(values: Sequence[float | None], window: int) -> list[float | None]:
     result: list[float | None] = []
     acc = 0.0
@@ -476,6 +502,42 @@ def _adx(
     return adx
 
 
+def _atr(
+    highs: Sequence[float | None],
+    lows: Sequence[float | None],
+    closes: Sequence[float | None],
+    window: int,
+) -> list[float | None]:
+    length = len(closes)
+    if len(highs) != length or len(lows) != length:
+        raise ValueError("ATR input lengths must match")
+
+    true_ranges: list[float | None] = [None] * length
+    for idx in range(length):
+        high = highs[idx]
+        low = lows[idx]
+        close = closes[idx]
+        if high is None or low is None or close is None:
+            continue
+        if idx == 0:
+            true_ranges[idx] = high - low
+            continue
+
+        prev_close = closes[idx - 1]
+        if prev_close is None:
+            continue
+
+        true_ranges[idx] = max(high - low, abs(high - prev_close), abs(low - prev_close))
+
+    smoothed_tr = _wilder_smooth(true_ranges, window)
+    atr: list[float | None] = [None] * length
+    for idx, value in enumerate(smoothed_tr):
+        if value is None:
+            continue
+        atr[idx] = value / window
+    return atr
+
+
 def _apply_by_market(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -583,6 +645,15 @@ def transform_rolling_mean(
     return _apply_by_market(rows, values, lambda group, _: _rolling_mean(group, window), params)
 
 
+def transform_ewma(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    return _apply_by_market(rows, values, lambda group, _: _ewma(group, window), params)
+
+
 def transform_rolling_sum(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -656,6 +727,32 @@ def transform_adx(
         market_lows = [low_values[idx] for idx in indexes]
         market_closes = [close_values[idx] for idx in indexes]
         transformed = _adx(market_highs, market_lows, market_closes, window)
+        if len(transformed) != len(indexes):
+            raise ValueError("Transform length mismatch in market scope")
+        for idx, value in zip(indexes, transformed):
+            result[idx] = value
+    return result
+
+
+def transform_atr(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    high_column = str(params.get("high_column", "high_price"))
+    low_column = str(params.get("low_column", "low_price"))
+
+    high_values = _values_from_column(rows, high_column)
+    low_values = _values_from_column(rows, low_column)
+    close_values = values
+
+    result: list[float | None] = [None] * len(rows)
+    for indexes in _market_groups(rows):
+        market_highs = [high_values[idx] for idx in indexes]
+        market_lows = [low_values[idx] for idx in indexes]
+        market_closes = [close_values[idx] for idx in indexes]
+        transformed = _atr(market_highs, market_lows, market_closes, window)
         if len(transformed) != len(indexes):
             raise ValueError("Transform length mismatch in market scope")
         for idx, value in zip(indexes, transformed):
@@ -804,10 +901,12 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "simple_return": transform_simple_return,
     "delta": transform_delta,
     "rolling_mean": transform_rolling_mean,
+    "ewma": transform_ewma,
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,
     "volatility": transform_volatility,
     "adx": transform_adx,
+    "atr": transform_atr,
     "cross_rank": transform_cross_rank,
     "cross_percentile": transform_cross_percentile,
     "calendar_mean": transform_calendar_mean,

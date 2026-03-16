@@ -3,12 +3,14 @@
   "timeframe": "240m",
   "out_dir": "data/grid/eth_ma_cross_240m_fee5bp",
   "run_name_template": "eth_ma_240m_{short}_{long}_{rebalance_frequency}_fee5bp",
+  "compute_rolling_ir": false,
+  "save_summary_plots": false,
   "rolling_ir_windows": [
     126,
     252
   ],
-  "save_rolling_ir_plots": true,
-  "top_curve_count": 5,
+  "save_rolling_ir_plots": false,
+  "top_curve_count": 0,
   "ranking_metric": "Total Return [%]",
   "feature_spec_template": [
     {

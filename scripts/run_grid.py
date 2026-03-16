@@ -39,6 +39,7 @@ from scripts.run_vectorbt import (
     benchmark_summary,
     build_benchmark_curve,
     compute_excess_curves,
+    compute_drawdown_recovery_stats,
     compute_information_ratio,
     compute_annualized_return,
     infer_periods_per_year,
@@ -48,6 +49,7 @@ from scripts.run_vectorbt import (
     compute_return_series,
     compute_rolling_information_ratio,
     compute_recent_1y_stats,
+    compute_recent_2y_stats,
     summarize_rolling_information_ratio,
     load_all_candles,
 )
@@ -260,6 +262,8 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
         "End Value",
         "Total Return [%]",
         "CAGR [%]",
+        "Longest Peak-to-Recovery Bars",
+        "Second Longest Peak-to-Recovery Bars",
         "Timeframe",
         "Periods Per Year",
         "Benchmark Market",
@@ -276,6 +280,11 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
         "Recent 1Y Information Ratio",
         "Recent 1Y AIR",
         "Recent 1Y Max Drawdown [%]",
+        "Recent 2Y Return [%]",
+        "Recent 2Y Benchmark Return [%]",
+        "Recent 2Y Information Ratio",
+        "Recent 2Y AIR",
+        "Recent 2Y Max Drawdown [%]",
         "Max Drawdown [%]",
         "Sharpe Ratio",
         "Calmar Ratio",
@@ -589,6 +598,11 @@ def main() -> None:
             aligned_benchmark_curve,
             annualization_factor=periods_per_year,
         )
+        recent_2y_stats = compute_recent_2y_stats(
+            equity_curve,
+            aligned_benchmark_curve,
+            annualization_factor=periods_per_year,
+        )
         rolling_ir_summary = pd.Series(dtype=float)
         rolling_ir = pd.DataFrame(index=excess_returns.index)
         if compute_rolling_ir_enabled:
@@ -610,6 +624,8 @@ def main() -> None:
                 ),
                 ir_stats,
                 recent_1y_stats,
+                recent_2y_stats,
+                compute_drawdown_recovery_stats(equity_curve),
                 rolling_ir_summary,
             ]
         )
