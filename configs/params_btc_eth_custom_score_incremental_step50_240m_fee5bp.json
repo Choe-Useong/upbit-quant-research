@@ -1,0 +1,7 @@
+{
+  "parameter_rebalance_frequency": "every_bar",
+  "parameter_incremental_step_size": 0.5,
+  "parameter_incremental_min_weight": 0.0,
+  "parameter_incremental_max_weight": 1.0,
+  "parameter_universe_name": "btc_eth_custom_score_lag1"
+}

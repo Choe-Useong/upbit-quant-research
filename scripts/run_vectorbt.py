@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 import sys
@@ -94,6 +95,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Annualization periods per year; omitted means infer from timeframe",
     )
+    parser.add_argument("--strategy-family", default="", help="Optional strategy family metadata")
+    parser.add_argument("--strategy-label", default="", help="Optional strategy label metadata")
+    parser.add_argument("--asset-scope", default="", help="Optional asset scope metadata")
+    parser.add_argument(
+        "--parameter-metadata-json",
+        default="",
+        help="Optional JSON file containing parameter_* metadata fields to write into summary.csv",
+    )
     return parser
 
 
@@ -122,11 +131,13 @@ def print_summary(summary: pd.Series) -> None:
         "Start Value",
         "End Value",
         "Total Return [%]",
+        "CAGR [%]",
         "Benchmark Return [%]",
         "Benchmark Market",
         "Benchmark Start Value",
         "Benchmark End Value",
         "Benchmark Total Return [%]",
+        "Benchmark CAGR [%]",
         "Benchmark Max Drawdown [%]",
         "Benchmark Sharpe Ratio",
         "Benchmark Sortino Ratio",
@@ -232,6 +243,7 @@ def benchmark_summary(
             "Benchmark Start Value": init_cash,
             "Benchmark End Value": end_value,
             "Benchmark Total Return [%]": total_return,
+            "Benchmark CAGR [%]": annualized_return * 100.0,
             "Benchmark Max Drawdown [%]": max_drawdown_pct,
             "Benchmark Sharpe Ratio": sharpe_ratio,
             "Benchmark Sortino Ratio": sortino_ratio,
@@ -486,6 +498,9 @@ def main() -> None:
     periods_per_year = args.periods_per_year or infer_periods_per_year(timeframe)
     periods_per_day = periods_per_day_for_timeframe(timeframe)
     pandas_freq = timeframe_to_pandas_freq(timeframe)
+    parameter_metadata: dict[str, str | int | float] = {}
+    if args.parameter_metadata_json:
+        parameter_metadata = json.loads(Path(args.parameter_metadata_json).read_text(encoding="utf-8-sig"))
 
     weight_rows = read_table_csv(Path(args.weights_csv))
     if not weight_rows:
@@ -539,8 +554,21 @@ def main() -> None:
         annualization_factor=periods_per_year,
     )
     rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
+    summary.loc["CAGR [%]"] = compute_annualized_return(
+        equity_curve,
+        annualization_factor=periods_per_year,
+    ) * 100.0
     summary.loc["Timeframe"] = timeframe
     summary.loc["Periods Per Year"] = periods_per_year
+    if args.strategy_family:
+        summary.loc["Strategy Family"] = args.strategy_family
+    if args.strategy_label:
+        summary.loc["Strategy Label"] = args.strategy_label
+    if args.asset_scope:
+        summary.loc["Asset Scope"] = args.asset_scope
+    for key, value in parameter_metadata.items():
+        if str(key).startswith("parameter_"):
+            summary.loc[str(key)] = value
     summary = pd.concat(
         [
             summary,

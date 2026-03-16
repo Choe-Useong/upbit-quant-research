@@ -1,0 +1,12 @@
+{
+  "weighting": "incremental_signal",
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "every_bar",
+  "feature_value_scale": 1.0,
+  "feature_value_clip_min": 0.0,
+  "feature_value_clip_max": 1.0,
+  "incremental_step_size": 0.25,
+  "incremental_min_weight": 0.0,
+  "incremental_max_weight": 1.0,
+  "universe_name": "btc_eth_custom_score_lag1"
+}

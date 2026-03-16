@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Iterable
 
 
-WEIGHTING_METHODS = {"equal", "rank", "feature_value"}
+WEIGHTING_METHODS = {"equal", "rank", "feature_value", "incremental_signal"}
 REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
 
 
@@ -21,6 +21,11 @@ class WeightSpec:
     feature_value_scale: float = 1.0
     feature_value_clip_min: float = 0.0
     feature_value_clip_max: float = 1.0
+    incremental_step_size: float = 0.25
+    incremental_step_up: float | None = None
+    incremental_step_down: float | None = None
+    incremental_min_weight: float = 0.0
+    incremental_max_weight: float = 1.0
 
     def resolved_name(self) -> str:
         prefix = self.universe_name or "universe"
@@ -32,6 +37,14 @@ class WeightSpec:
         if self.weighting == "feature_value":
             return (
                 f"{prefix}__feature_value_{self.rebalance_frequency}"
+                f"_gross{self.gross_exposure:g}"
+            )
+        if self.weighting == "incremental_signal":
+            step_up = self.incremental_step_up if self.incremental_step_up is not None else self.incremental_step_size
+            step_down = self.incremental_step_down if self.incremental_step_down is not None else self.incremental_step_size
+            return (
+                f"{prefix}__incremental_signal_{self.rebalance_frequency}"
+                f"_up{step_up:g}_down{step_down:g}"
                 f"_gross{self.gross_exposure:g}"
             )
         return (
@@ -102,6 +115,116 @@ def _feature_value_weights(
     ]
 
 
+def _scaled_feature_score(
+    row: dict[str, str],
+    scale: float,
+    clip_min: float,
+    clip_max: float,
+) -> float:
+    raw_value = float(row["feature_value"]) / scale
+    return _clip(raw_value, clip_min, clip_max)
+
+
+def _incremental_signal_weight_rows(
+    rows: list[dict[str, str]],
+    spec: WeightSpec,
+) -> list[dict[str, str]]:
+    step_up = spec.incremental_step_up if spec.incremental_step_up is not None else spec.incremental_step_size
+    step_down = spec.incremental_step_down if spec.incremental_step_down is not None else spec.incremental_step_size
+    if step_up <= 0:
+        raise ValueError("incremental_step_up must be positive")
+    if step_down <= 0:
+        raise ValueError("incremental_step_down must be positive")
+    if spec.incremental_min_weight > spec.incremental_max_weight:
+        raise ValueError("incremental_min_weight must be <= incremental_max_weight")
+    if spec.feature_value_scale <= 0:
+        raise ValueError("feature_value_scale must be positive")
+
+    active_dates = _selected_rebalance_dates(rows, spec.rebalance_frequency)
+    grouped_rows: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for row in rows:
+        grouped_rows[row["date_utc"]].append(row)
+
+    market_reference: dict[str, dict[str, str]] = {}
+    current_scores: dict[str, float] = {}
+    weighted_rows: list[dict[str, str]] = []
+
+    for date_utc in sorted(active_dates):
+        date_rows = sorted(grouped_rows.get(date_utc, []), key=lambda row: int(row["selected_rank"]))
+        if spec.max_positions is not None:
+            date_rows = date_rows[: spec.max_positions]
+
+        row_by_market = {row["market"]: row for row in date_rows}
+        for row in date_rows:
+            market_reference[row["market"]] = row
+
+        tracked_markets = sorted(set(market_reference.keys()) | set(current_scores.keys()) | set(row_by_market.keys()))
+        next_weights: dict[str, float] = {}
+        feature_values_by_market: dict[str, str] = {}
+        feature_columns_by_market: dict[str, str] = {}
+
+        for market in tracked_markets:
+            current_score = current_scores.get(market, 0.0)
+            row = row_by_market.get(market)
+            signal_on = False
+            if row is not None:
+                signal_on = _scaled_feature_score(
+                    row,
+                    spec.feature_value_scale,
+                    spec.feature_value_clip_min,
+                    spec.feature_value_clip_max,
+                ) > 0.0
+                feature_values_by_market[market] = row["feature_value"]
+                feature_columns_by_market[market] = row["feature_column"]
+            else:
+                feature_values_by_market[market] = "0"
+                feature_columns_by_market[market] = market_reference[market].get("feature_column", "")
+
+            if signal_on:
+                next_score = min(current_score + step_up, spec.incremental_max_weight)
+            else:
+                next_score = max(current_score - step_down, spec.incremental_min_weight)
+            next_weights[market] = next_score
+
+        active_markets = [market for market, score in next_weights.items() if score > 0.0]
+        active_count = len(active_markets)
+        if active_count <= 0:
+            current_scores = {market: score for market, score in next_weights.items() if score > 0.0}
+            continue
+
+        for market in tracked_markets:
+            current_scores[market] = next_weights[market]
+            scaled_weight = (spec.gross_exposure * next_weights[market]) / active_count
+            if scaled_weight <= 0.0:
+                continue
+
+            reference_row = row_by_market.get(market) or market_reference[market]
+            is_current_row = market in row_by_market
+            weighted_rows.append(
+                {
+                    "date_utc": date_utc,
+                    "date_kst": row_by_market[market]["date_kst"] if is_current_row else _utc_to_kst(date_utc),
+                    "market": market,
+                    "korean_name": reference_row["korean_name"],
+                    "english_name": reference_row["english_name"],
+                    "market_warning": reference_row["market_warning"],
+                    "feature_column": feature_columns_by_market[market],
+                    "feature_value": feature_values_by_market[market],
+                    "rank": reference_row["rank"] if is_current_row else "",
+                    "selected_rank": reference_row["selected_rank"] if is_current_row else "",
+                    "weight_rank": "",
+                    "target_weight": f"{scaled_weight:.12g}",
+                    "gross_exposure": f"{spec.gross_exposure:.12g}",
+                    "weighting": spec.weighting,
+                    "rebalance_frequency": spec.rebalance_frequency,
+                    "weights_name": spec.resolved_name(),
+                    "universe_name": reference_row["universe_name"],
+                }
+            )
+
+    return weighted_rows
+
+
 def _parse_date(date_utc: str) -> date:
     return datetime.fromisoformat(date_utc).date()
 
@@ -116,6 +239,10 @@ def _period_key(date_utc: str, frequency: str) -> tuple[int, ...]:
     if frequency == "monthly":
         return (parsed.year, parsed.month)
     raise ValueError(f"Unsupported rebalance frequency: {frequency}")
+
+
+def _utc_to_kst(date_utc: str) -> str:
+    return (datetime.fromisoformat(date_utc) + timedelta(hours=9)).isoformat()
 
 
 def _selected_rebalance_dates(rows: list[dict[str, str]], frequency: str) -> set[str]:
@@ -143,6 +270,8 @@ def build_weight_table(
     rows = sorted(universe_rows, key=lambda row: (row["date_utc"], int(row["selected_rank"])))
     if not rows:
         return []
+    if spec.weighting == "incremental_signal":
+        return _incremental_signal_weight_rows(rows, spec)
 
     active_dates = _selected_rebalance_dates(rows, spec.rebalance_frequency)
     weighted_rows: list[dict[str, str]] = []

@@ -36,6 +36,11 @@ def load_weight_spec(path: Path) -> WeightSpec:
         feature_value_scale=payload.get("feature_value_scale", 1.0),
         feature_value_clip_min=payload.get("feature_value_clip_min", 0.0),
         feature_value_clip_max=payload.get("feature_value_clip_max", 1.0),
+        incremental_step_size=payload.get("incremental_step_size", 0.25),
+        incremental_step_up=payload.get("incremental_step_up"),
+        incremental_step_down=payload.get("incremental_step_down"),
+        incremental_min_weight=payload.get("incremental_min_weight", 0.0),
+        incremental_max_weight=payload.get("incremental_max_weight", 1.0),
     )
 
 

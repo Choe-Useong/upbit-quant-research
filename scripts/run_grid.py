@@ -40,6 +40,7 @@ from scripts.run_vectorbt import (
     build_benchmark_curve,
     compute_excess_curves,
     compute_information_ratio,
+    compute_annualized_return,
     infer_periods_per_year,
     infer_timeframe,
     periods_per_day_for_timeframe,
@@ -202,6 +203,19 @@ def _load_weight_spec_from_payload(payload: dict[str, Any]) -> WeightSpec:
         feature_value_scale=float(payload.get("feature_value_scale", 1.0)),
         feature_value_clip_min=float(payload.get("feature_value_clip_min", 0.0)),
         feature_value_clip_max=float(payload.get("feature_value_clip_max", 1.0)),
+        incremental_step_size=float(payload.get("incremental_step_size", 0.25)),
+        incremental_step_up=(
+            None
+            if payload.get("incremental_step_up") is None
+            else float(payload.get("incremental_step_up"))
+        ),
+        incremental_step_down=(
+            None
+            if payload.get("incremental_step_down") is None
+            else float(payload.get("incremental_step_down"))
+        ),
+        incremental_min_weight=float(payload.get("incremental_min_weight", 0.0)),
+        incremental_max_weight=float(payload.get("incremental_max_weight", 1.0)),
     )
 
 
@@ -245,10 +259,12 @@ def _preferred_summary_fields(summary: pd.Series) -> dict[str, Any]:
         "Start Value",
         "End Value",
         "Total Return [%]",
+        "CAGR [%]",
         "Timeframe",
         "Periods Per Year",
         "Benchmark Market",
         "Benchmark Total Return [%]",
+        "Benchmark CAGR [%]",
         "Benchmark Max Drawdown [%]",
         "Benchmark Sharpe Ratio",
         "Benchmark Sortino Ratio",
@@ -333,6 +349,8 @@ def _render_run_payloads(config: dict[str, Any], context: dict[str, Any]) -> dic
         "universe_payload": _render_value(config["universe_spec_template"], context),
         "weight_payload": _render_value(config["weight_spec_template"], context),
         "vectorbt_payload": _render_value(config.get("vectorbt_spec_template", {}), context),
+        "metadata_payload": _render_value(config.get("strategy_metadata_template", {}), context),
+        "parameter_metadata_payload": _render_value(config.get("parameter_metadata_template", {}), context),
     }
 
 
@@ -453,10 +471,13 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     top_curve_count = int(config.get("top_curve_count", 5))
     ranking_metric = str(config.get("ranking_metric", "Total Return [%]"))
+    compute_rolling_ir_enabled = bool(config.get("compute_rolling_ir", True))
     rolling_ir_windows = tuple(int(value) for value in config.get("rolling_ir_windows", [126, 252]))
+    save_summary_plots = bool(config.get("save_summary_plots", False))
     save_rolling_ir_plots = bool(config.get("save_rolling_ir_plots", False))
     rolling_ir_dir = out_dir / "rolling_ir"
-    rolling_ir_dir.mkdir(parents=True, exist_ok=True)
+    if compute_rolling_ir_enabled:
+        rolling_ir_dir.mkdir(parents=True, exist_ok=True)
 
     candle_rows = load_all_candles(candle_dir)
     if not candle_rows:
@@ -482,6 +503,8 @@ def main() -> None:
         universe_payload = rendered["universe_payload"]
         weight_payload = rendered["weight_payload"]
         vectorbt_payload = rendered["vectorbt_payload"]
+        metadata_payload = rendered.get("metadata_payload", {})
+        parameter_metadata_payload = rendered.get("parameter_metadata_payload", {})
         run_payloads_by_name[context["run_name"]] = rendered
 
         universe_spec = _load_universe_spec_from_payload(universe_payload)
@@ -515,6 +538,13 @@ def main() -> None:
         selection_stats = _selection_stats(weight_rows)
 
         result_row: dict[str, Any] = {"run_name": context["run_name"], **combo}
+        for key in ("strategy_family", "strategy_label", "asset_scope"):
+            value = metadata_payload.get(key, "")
+            if value not in (None, ""):
+                result_row[key] = value
+        for key, value in parameter_metadata_payload.items():
+            if str(key).startswith("parameter_") and value not in (None, ""):
+                result_row[str(key)] = value
         result_row.update(selection_stats)
         result_row["universe_rows"] = len(universe_rows)
         result_row["weight_rows"] = len(weight_rows)
@@ -554,18 +584,21 @@ def main() -> None:
             aligned_benchmark_curve,
             vectorbt_spec.init_cash,
         )
-        rolling_ir = compute_rolling_information_ratio(
-            excess_returns,
-            windows=rolling_ir_windows,
-            periods_per_day=periods_per_day,
-            annualization_factor=periods_per_year,
-        )
         recent_1y_stats = compute_recent_1y_stats(
             equity_curve,
             aligned_benchmark_curve,
             annualization_factor=periods_per_year,
         )
-        rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
+        rolling_ir_summary = pd.Series(dtype=float)
+        rolling_ir = pd.DataFrame(index=excess_returns.index)
+        if compute_rolling_ir_enabled:
+            rolling_ir = compute_rolling_information_ratio(
+                excess_returns,
+                windows=rolling_ir_windows,
+                periods_per_day=periods_per_day,
+                annualization_factor=periods_per_year,
+            )
+            rolling_ir_summary = summarize_rolling_information_ratio(rolling_ir)
         summary = pd.concat(
             [
                 summary,
@@ -580,17 +613,33 @@ def main() -> None:
                 rolling_ir_summary,
             ]
         )
+        summary.loc["CAGR [%]"] = compute_annualized_return(
+            equity_curve,
+            annualization_factor=periods_per_year,
+        ) * 100.0
         summary.loc["Timeframe"] = timeframe
         summary.loc["Periods Per Year"] = periods_per_year
+        for key, summary_key in (
+            ("strategy_family", "Strategy Family"),
+            ("strategy_label", "Strategy Label"),
+            ("asset_scope", "Asset Scope"),
+        ):
+            value = metadata_payload.get(key, "")
+            if value not in (None, ""):
+                summary.loc[summary_key] = value
+        for key, value in parameter_metadata_payload.items():
+            if str(key).startswith("parameter_") and value not in (None, ""):
+                summary.loc[str(key)] = value
 
         result_row["status"] = "ok"
         result_row.update(_preferred_summary_fields(summary))
         result_rows.append(result_row)
-        rolling_ir.to_csv(
-            rolling_ir_dir / f"{context['run_name']}_rolling_ir.csv",
-            encoding="utf-8-sig",
-        )
-        if save_rolling_ir_plots:
+        if compute_rolling_ir_enabled:
+            rolling_ir.to_csv(
+                rolling_ir_dir / f"{context['run_name']}_rolling_ir.csv",
+                encoding="utf-8-sig",
+            )
+        if compute_rolling_ir_enabled and save_rolling_ir_plots:
             rolling_ir_figure = _build_rolling_ir_figure(rolling_ir, context["run_name"])
             rolling_ir_figure.write_html(
                 str(rolling_ir_dir / f"{context['run_name']}_rolling_ir.html"),
@@ -666,18 +715,6 @@ def main() -> None:
             benchmark_market = run_benchmark_market
 
     if top_curves:
-        top_rolling_ir: dict[str, pd.DataFrame] = {}
-        for _, row in ok_frame.iterrows():
-            run_name = str(row["run_name"])
-            rolling_ir_path = rolling_ir_dir / f"{run_name}_rolling_ir.csv"
-            if rolling_ir_path.exists():
-                top_rolling_ir[run_name] = pd.read_csv(
-                    rolling_ir_path,
-                    encoding="utf-8-sig",
-                    index_col=0,
-                    parse_dates=True,
-                )
-
         curves_frame = pd.concat(
             [series.rename(name) for name, series in top_curves.items()],
             axis=1,
@@ -686,23 +723,46 @@ def main() -> None:
             curves_frame[benchmark_curve.name or "benchmark"] = benchmark_curve
         curves_path = out_dir / "top_curves.csv"
         curves_frame.to_csv(curves_path, encoding="utf-8-sig")
-        figure = _build_top_curves_figure(top_curves, benchmark_curve)
-        plot_path = out_dir / "top_curves_plot.html"
-        figure.write_html(str(plot_path), auto_open=False)
-        if args.open_plot:
-            webbrowser.open(plot_path.resolve().as_uri())
-        suffix = f" with benchmark {benchmark_market}" if benchmark_market else ""
-        print(
-            f"Wrote top {len(top_curves)} curve comparison to {plot_path}{suffix}"
-        )
-        for window in rolling_ir_windows:
-            column = f"rolling_ir_{window}d"
-            figure = _build_top_rolling_ir_figure(top_rolling_ir, column)
-            rolling_plot_path = out_dir / f"top_{column}_plot.html"
-            figure.write_html(str(rolling_plot_path), auto_open=False)
+        if compute_rolling_ir_enabled and save_summary_plots:
+            top_rolling_ir: dict[str, pd.DataFrame] = {}
+            for _, row in ok_frame.iterrows():
+                run_name = str(row["run_name"])
+                rolling_ir_path = rolling_ir_dir / f"{run_name}_rolling_ir.csv"
+                if rolling_ir_path.exists():
+                    top_rolling_ir[run_name] = pd.read_csv(
+                        rolling_ir_path,
+                        encoding="utf-8-sig",
+                        index_col=0,
+                        parse_dates=True,
+                    )
+
+            figure = _build_top_curves_figure(top_curves, benchmark_curve)
+            plot_path = out_dir / "top_curves_plot.html"
+            figure.write_html(str(plot_path), auto_open=False)
             if args.open_plot:
-                webbrowser.open(rolling_plot_path.resolve().as_uri())
-            print(f"Wrote top rolling IR comparison to {rolling_plot_path}")
+                webbrowser.open(plot_path.resolve().as_uri())
+            suffix = f" with benchmark {benchmark_market}" if benchmark_market else ""
+            print(
+                f"Wrote top {len(top_curves)} curve comparison to {plot_path}{suffix}"
+            )
+            for window in rolling_ir_windows:
+                column = f"rolling_ir_{window}d"
+                figure = _build_top_rolling_ir_figure(top_rolling_ir, column)
+                rolling_plot_path = out_dir / f"top_{column}_plot.html"
+                figure.write_html(str(rolling_plot_path), auto_open=False)
+                if args.open_plot:
+                    webbrowser.open(rolling_plot_path.resolve().as_uri())
+                print(f"Wrote top rolling IR comparison to {rolling_plot_path}")
+        elif save_summary_plots:
+            figure = _build_top_curves_figure(top_curves, benchmark_curve)
+            plot_path = out_dir / "top_curves_plot.html"
+            figure.write_html(str(plot_path), auto_open=False)
+            if args.open_plot:
+                webbrowser.open(plot_path.resolve().as_uri())
+            suffix = f" with benchmark {benchmark_market}" if benchmark_market else ""
+            print(
+                f"Wrote top {len(top_curves)} curve comparison to {plot_path}{suffix}"
+            )
 
 
 if __name__ == "__main__":
