@@ -1,0 +1,279 @@
+{
+  "timeframe": "60m",
+  "candle_dir": "data/upbit/minutes/60",
+  "is_months": 24,
+  "oos_months": 12,
+  "step_months": 6,
+  "assets": [
+    {
+      "asset": "BTC",
+      "benchmark_market": "KRW-BTC",
+      "primary_market": "KRW-BTC",
+      "candidates": [
+        {
+          "label": "btc_10_120",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 10 } }], "column_name": "sma_10" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 120 } }], "column_name": "sma_120" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_120" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "btc_ma_60m_10_120_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-BTC"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "btc_10_120_200_mix_67_33",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 10 } }], "column_name": "sma_10" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 120 } }], "column_name": "sma_120" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 200 } }], "column_name": "sma_200" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_120" }, "column_name": "ma_10_120" },
+            { "compare": { "left_feature": "sma_120", "operator": "gt", "right_feature": "sma_200" }, "column_name": "ma_120_200" },
+            { "logical": { "operator": "and", "features": ["ma_10_120", "ma_120_200"] }, "column_name": "ma_10_120_200" },
+            {
+              "components": [
+                { "feature_column": "ma_10_120", "weight": 0.67 },
+                { "feature_column": "ma_10_120_200", "weight": 0.33 }
+              ],
+              "combine": "weighted_sum",
+              "column_name": "score"
+            }
+          ],
+          "universe_spec": {
+            "name": "btc_score_exposure_60m_10_120_and_10_120_200_67_33",
+            "feature_column": "score",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-BTC"],
+            "value_filters": [{ "feature_column": "score", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": {
+            "weighting": "feature_value",
+            "gross_exposure": 1.0,
+            "rebalance_frequency": "every_bar",
+            "feature_value_scale": 1.0,
+            "feature_value_clip_min": 0.0,
+            "feature_value_clip_max": 1.0
+          },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    },
+    {
+      "asset": "ETH",
+      "benchmark_market": "KRW-ETH",
+      "primary_market": "KRW-ETH",
+      "candidates": [
+        {
+          "label": "eth_5_60",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_3_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 3 } }], "column_name": "sma_3" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_3", "operator": "gt", "right_feature": "sma_400" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_3_400_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_plus_3_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 3 } }], "column_name": "sma_3" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "ma_5_60" },
+            { "compare": { "left_feature": "sma_3", "operator": "gt", "right_feature": "sma_400" }, "column_name": "ma_3_400" },
+            {
+              "components": [
+                { "feature_column": "ma_5_60", "weight": 0.5 },
+                { "feature_column": "ma_3_400", "weight": 0.5 }
+              ],
+              "combine": "weighted_sum",
+              "column_name": "score"
+            }
+          ],
+          "universe_spec": {
+            "name": "eth_score_exposure_5_60_and_3_400_every_bar_fee5bp",
+            "feature_column": "score",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "score", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": {
+            "weighting": "feature_value",
+            "gross_exposure": 1.0,
+            "rebalance_frequency": "every_bar",
+            "feature_value_scale": 1.0,
+            "feature_value_clip_min": 0.0,
+            "feature_value_clip_max": 1.0
+          },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    },
+    {
+      "asset": "SOL",
+      "benchmark_market": "KRW-SOL",
+      "primary_market": "KRW-SOL",
+      "candidates": [
+        {
+          "label": "sol_10_60",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 10 } }], "column_name": "sma_10" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "sol_ma_60m_10_60_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-SOL"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "sol_5_60_200",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 200 } }], "column_name": "sma_200" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "ma_5_60" },
+            { "compare": { "left_feature": "sma_60", "operator": "gt", "right_feature": "sma_200" }, "column_name": "ma_60_200" },
+            { "logical": { "operator": "and", "features": ["ma_5_60", "ma_60_200"] }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "sol_ma_stack_60m_5_60_200_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-SOL"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    },
+    {
+      "asset": "XRP",
+      "benchmark_market": "KRW-XRP",
+      "primary_market": "KRW-XRP",
+      "candidates": [
+        {
+          "label": "xrp_10_20_120",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 10 } }], "column_name": "sma_10" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 20 } }], "column_name": "sma_20" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 120 } }], "column_name": "sma_120" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_20" }, "column_name": "ma_10_20" },
+            { "compare": { "left_feature": "sma_20", "operator": "gt", "right_feature": "sma_120" }, "column_name": "ma_20_120" },
+            { "logical": { "operator": "and", "features": ["ma_10_20", "ma_20_120"] }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "xrp_ma_stack_60m_10_20_120_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-XRP"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "xrp_10_20_120_plus_10_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 10 } }], "column_name": "sma_10" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 20 } }], "column_name": "sma_20" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 120 } }], "column_name": "sma_120" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_20" }, "column_name": "ma_10_20" },
+            { "compare": { "left_feature": "sma_20", "operator": "gt", "right_feature": "sma_120" }, "column_name": "ma_20_120" },
+            { "logical": { "operator": "and", "features": ["ma_10_20", "ma_20_120"] }, "column_name": "ma_10_20_120" },
+            { "compare": { "left_feature": "sma_10", "operator": "gt", "right_feature": "sma_400" }, "column_name": "ma_10_400" },
+            {
+              "components": [
+                { "feature_column": "ma_10_20_120", "weight": 0.5 },
+                { "feature_column": "ma_10_400", "weight": 0.5 }
+              ],
+              "combine": "weighted_sum",
+              "column_name": "score"
+            }
+          ],
+          "universe_spec": {
+            "name": "xrp_score_exposure_60m_10_20_120_and_10_400_every_bar_fee5bp",
+            "feature_column": "score",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-XRP"],
+            "value_filters": [{ "feature_column": "score", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": {
+            "weighting": "feature_value",
+            "gross_exposure": 1.0,
+            "rebalance_frequency": "every_bar",
+            "feature_value_scale": 1.0,
+            "feature_value_clip_min": 0.0,
+            "feature_value_clip_max": 1.0
+          },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    }
+  ]
+}

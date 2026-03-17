@@ -47,6 +47,12 @@ class LogicalSpec:
 
 
 @dataclass(frozen=True)
+class StateSpec:
+    entry_feature: str
+    exit_feature: str
+
+
+@dataclass(frozen=True)
 class FeatureSpec:
     source: str | None = None
     steps: tuple[TransformSpec, ...] = ()
@@ -54,6 +60,7 @@ class FeatureSpec:
     combine: str | None = None
     compare: CompareSpec | None = None
     logical: LogicalSpec | None = None
+    state: StateSpec | None = None
     column_name: str | None = None
 
     def resolved_column_name(self) -> str:
@@ -69,6 +76,8 @@ class FeatureSpec:
         if self.logical is not None:
             joined = "__".join(self.logical.features)
             return f"{self.logical.operator}__{joined}"
+        if self.state is not None:
+            return f"hold__{self.state.entry_feature}__until__{self.state.exit_feature}"
         if self.components:
             suffix = "__".join(
                 f"{component.feature_column}_w{component.weight:g}"
@@ -78,7 +87,7 @@ class FeatureSpec:
             return f"{prefix}__{suffix}"
         if not self.steps:
             if self.source is None:
-                raise ValueError("FeatureSpec must define source, components, compare, or logical")
+                raise ValueError("FeatureSpec must define source, components, compare, logical, or state")
             return self.source
         suffix = "__".join(step.resolved_name() for step in self.steps)
         if self.source is None:
@@ -555,6 +564,34 @@ def _apply_by_market(
     return result
 
 
+def _holding_state(
+    rows: list[dict[str, str]],
+    entry_values: list[float | None],
+    exit_values: list[float | None],
+) -> list[float | None]:
+    if len(entry_values) != len(rows) or len(exit_values) != len(rows):
+        raise ValueError("Holding state input lengths must match rows")
+
+    result: list[float | None] = [None] * len(rows)
+    for indexes in _market_groups(rows):
+        holding = False
+        for idx in indexes:
+            entry_value = entry_values[idx]
+            exit_value = exit_values[idx]
+            if entry_value is None or exit_value is None:
+                result[idx] = None
+                continue
+            entry_flag = entry_value != 0.0
+            exit_flag = exit_value != 0.0
+            if holding:
+                if exit_flag:
+                    holding = False
+            elif entry_flag:
+                holding = True
+            result[idx] = 1.0 if holding else 0.0
+    return result
+
+
 def _apply_by_date(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -661,6 +698,15 @@ def transform_rolling_sum(
 ) -> list[float | None]:
     window = int(params["window"])
     return _apply_by_market(rows, values, lambda group, _: _rolling_sum(group, window), params)
+
+
+def transform_rolling_std(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    return _apply_by_market(rows, values, lambda group, _: _rolling_std(group, window), params)
 
 
 def transform_delta(
@@ -901,6 +947,7 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "simple_return": transform_simple_return,
     "delta": transform_delta,
     "rolling_mean": transform_rolling_mean,
+    "rolling_std": transform_rolling_std,
     "ewma": transform_ewma,
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,
@@ -999,6 +1046,16 @@ def apply_feature_spec(
                 result.append(0.0 if flags[0] else 1.0)
         return result
 
+    if spec.state is not None:
+        state = spec.state
+        if state.entry_feature not in rows[0]:
+            raise ValueError(f"Unknown state entry feature column: {state.entry_feature}")
+        if state.exit_feature not in rows[0]:
+            raise ValueError(f"Unknown state exit feature column: {state.exit_feature}")
+        entry_values = _values_from_column(rows, state.entry_feature)
+        exit_values = _values_from_column(rows, state.exit_feature)
+        return _holding_state(rows, entry_values, exit_values)
+
     if spec.components:
         combine = spec.combine or "weighted_sum"
         if combine != "weighted_sum":
@@ -1013,7 +1070,7 @@ def apply_feature_spec(
         return _weighted_sum(values_by_component, weights)
 
     if spec.source is None:
-        raise ValueError("FeatureSpec must define source or components")
+        raise ValueError("FeatureSpec must define source, components, logical, compare, or state")
     current_values = _resolve_source_values(rows, spec.source)
     if not spec.steps and not _source_exists(rows, spec.source):
         raise ValueError(f"Unknown source column: {spec.source}")
@@ -1037,6 +1094,7 @@ def build_feature_table(
         if (
             spec.compare is None
             and spec.logical is None
+            and spec.state is None
             and not spec.components
             and spec.source is not None
             and not _source_exists(feature_rows, spec.source)

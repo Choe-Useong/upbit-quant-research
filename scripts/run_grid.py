@@ -24,6 +24,7 @@ from lib.features import (
     FeatureSpec,
     LogicalSpec,
     ScoreComponentSpec,
+    StateSpec,
     TransformSpec,
     build_feature_table,
 )
@@ -141,6 +142,13 @@ def _load_feature_specs_from_payload(payload: list[dict[str, Any]]) -> list[Feat
                 operator=logical_payload["operator"],
                 features=tuple(logical_payload["features"]),
             )
+        state = None
+        if "state" in item:
+            state_payload = item["state"]
+            state = StateSpec(
+                entry_feature=state_payload["entry_feature"],
+                exit_feature=state_payload["exit_feature"],
+            )
         specs.append(
             FeatureSpec(
                 source=item.get("source"),
@@ -149,6 +157,7 @@ def _load_feature_specs_from_payload(payload: list[dict[str, Any]]) -> list[Feat
                 combine=item.get("combine"),
                 compare=compare,
                 logical=logical,
+                state=state,
                 column_name=item.get("column_name"),
             )
         )
