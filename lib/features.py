@@ -340,6 +340,59 @@ def _rolling_vwma(
     return result
 
 
+def _rolling_weighted_geometric_mean(
+    prices: Sequence[float | None],
+    weights: Sequence[float | None],
+    window: int,
+) -> list[float | None]:
+    if len(prices) != len(weights):
+        raise ValueError("Weighted geometric mean price and weight lengths must match")
+
+    result: list[float | None] = []
+    weighted_log_sum = 0.0
+    weight_sum = 0.0
+    missing = 0
+
+    for idx, (price, weight) in enumerate(zip(prices, weights)):
+        if price is None or weight is None or price <= 0:
+            missing += 1
+        else:
+            weighted_log_sum += math.log(price) * weight
+            weight_sum += weight
+
+        if idx >= window:
+            old_price = prices[idx - window]
+            old_weight = weights[idx - window]
+            if old_price is None or old_weight is None or old_price <= 0:
+                missing -= 1
+            else:
+                weighted_log_sum -= math.log(old_price) * old_weight
+                weight_sum -= old_weight
+
+        if idx + 1 < window or missing > 0 or weight_sum <= 0:
+            result.append(None)
+        else:
+            result.append(math.exp(weighted_log_sum / weight_sum))
+
+    return result
+
+
+def _transform_volume_value(volume: float | None, mode: str) -> float | None:
+    if volume is None:
+        return None
+    if mode == "none":
+        return volume
+    if mode == "log":
+        if volume <= 0:
+            return None
+        return math.log(volume)
+    if mode == "log1p":
+        if volume < 0:
+            return None
+        return math.log1p(volume)
+    raise ValueError(f"Unsupported volume_transform: {mode}")
+
+
 def _rolling_std(values: Sequence[float | None], window: int) -> list[float | None]:
     result: list[float | None] = []
     for idx in range(len(values)):
@@ -718,6 +771,30 @@ def transform_delta(
     return _apply_by_market(rows, values, lambda group, _: _difference(group, periods), params)
 
 
+def transform_log(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    del rows
+    mode = str(params.get("mode", "log"))
+    result: list[float | None] = [None] * len(values)
+    for idx, value in enumerate(values):
+        if value is None:
+            continue
+        if mode == "log":
+            if value <= 0:
+                continue
+            result[idx] = math.log(value)
+        elif mode == "log1p":
+            if value < 0:
+                continue
+            result[idx] = math.log1p(value)
+        else:
+            raise ValueError(f"Unsupported log mode: {mode}")
+    return result
+
+
 def transform_vwma(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -725,13 +802,42 @@ def transform_vwma(
 ) -> list[float | None]:
     window = int(params["window"])
     volume_column = str(params.get("volume_column", "candle_acc_trade_volume"))
-    volume_values = _values_from_column(rows, volume_column)
+    volume_transform = str(params.get("volume_transform", "none"))
+    volume_values = [
+        _transform_volume_value(volume, volume_transform)
+        for volume in _values_from_column(rows, volume_column)
+    ]
 
     result: list[float | None] = [None] * len(rows)
     for indexes in _market_groups(rows):
         market_prices = [values[idx] for idx in indexes]
         market_volumes = [volume_values[idx] for idx in indexes]
         transformed = _rolling_vwma(market_prices, market_volumes, window)
+        if len(transformed) != len(indexes):
+            raise ValueError("Transform length mismatch in market scope")
+        for idx, value in zip(indexes, transformed):
+            result[idx] = value
+    return result
+
+
+def transform_vwgm(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    volume_column = str(params.get("volume_column", "candle_acc_trade_volume"))
+    volume_transform = str(params.get("volume_transform", "none"))
+    weight_values = [
+        _transform_volume_value(volume, volume_transform)
+        for volume in _values_from_column(rows, volume_column)
+    ]
+
+    result: list[float | None] = [None] * len(rows)
+    for indexes in _market_groups(rows):
+        market_prices = [values[idx] for idx in indexes]
+        market_weights = [weight_values[idx] for idx in indexes]
+        transformed = _rolling_weighted_geometric_mean(market_prices, market_weights, window)
         if len(transformed) != len(indexes):
             raise ValueError("Transform length mismatch in market scope")
         for idx, value in zip(indexes, transformed):
@@ -946,11 +1052,13 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "momentum": transform_momentum,
     "simple_return": transform_simple_return,
     "delta": transform_delta,
+    "log": transform_log,
     "rolling_mean": transform_rolling_mean,
     "rolling_std": transform_rolling_std,
     "ewma": transform_ewma,
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,
+    "vwgm": transform_vwgm,
     "volatility": transform_volatility,
     "adx": transform_adx,
     "atr": transform_atr,

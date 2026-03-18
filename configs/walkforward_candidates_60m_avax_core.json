@@ -1,0 +1,96 @@
+{
+  "timeframe": "60m",
+  "candle_dir": "data/upbit/minutes/60",
+  "is_months": 24,
+  "oos_months": 12,
+  "step_months": 6,
+  "assets": [
+    {
+      "asset": "AVAX",
+      "benchmark_market": "KRW-AVAX",
+      "primary_market": "KRW-AVAX",
+      "candidates": [
+        {
+          "label": "avax_1_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 1 } }], "column_name": "sma_1" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_1", "operator": "gt", "right_feature": "sma_400" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "avax_ma_60m_1_400_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-AVAX"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "avax_5_120",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 120 } }], "column_name": "sma_120" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_120" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "avax_ma_60m_5_120_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-AVAX"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "avax_5_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_400" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "avax_ma_60m_5_400_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-AVAX"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "avax_3_400",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 3 } }], "column_name": "sma_3" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 400 } }], "column_name": "sma_400" },
+            { "compare": { "left_feature": "sma_3", "operator": "gt", "right_feature": "sma_400" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "avax_ma_60m_3_400_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-AVAX"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    }
+  ]
+}

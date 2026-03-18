@@ -29,6 +29,7 @@ def load_weight_spec(path: Path) -> WeightSpec:
     return WeightSpec(
         weighting=payload.get("weighting", "equal"),
         gross_exposure=payload.get("gross_exposure", 1.0),
+        fixed_weight=payload.get("fixed_weight"),
         rank_power=payload.get("rank_power", 1.0),
         max_positions=payload.get("max_positions"),
         universe_name=payload.get("universe_name"),

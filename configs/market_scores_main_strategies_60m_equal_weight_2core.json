@@ -1,0 +1,17 @@
+{
+  "output_column": "custom_score",
+  "rules": [
+    {
+      "market": "KRW-BTC",
+      "components": [
+        { "feature_column": "sma10_gt_sma120", "weight": 1.0 }
+      ]
+    },
+    {
+      "market": "KRW-ETH",
+      "components": [
+        { "feature_column": "sma5_gt_sma60", "weight": 1.0 }
+      ]
+    }
+  ]
+}

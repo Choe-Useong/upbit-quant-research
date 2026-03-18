@@ -1,0 +1,25 @@
+{
+  "name": "main_strategies_240m_equal_weight_lag1",
+  "feature_column": "custom_score",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 7,
+  "ascending": false,
+  "allowed_markets": [
+    "KRW-BTC",
+    "KRW-ETH",
+    "KRW-SOL",
+    "KRW-XRP",
+    "KRW-ADA",
+    "KRW-DOGE",
+    "KRW-AVAX"
+  ],
+  "value_filters": [
+    {
+      "feature_column": "custom_score",
+      "operator": "gt",
+      "value": 0.0,
+      "lag": 1
+    }
+  ]
+}

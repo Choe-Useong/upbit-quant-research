@@ -1,0 +1,53 @@
+{
+  "output_column": "custom_score",
+  "rules": [
+    {
+      "market": "KRW-BTC",
+      "components": [
+        { "feature_column": "sma10_gt_sma120", "weight": 1.0 }
+      ]
+    },
+    {
+      "market": "KRW-ETH",
+      "components": [
+        { "feature_column": "sma5_gt_sma60", "weight": 1.0 }
+      ]
+    },
+    {
+      "market": "KRW-SOL",
+      "mode": "all_true",
+      "components": [
+        { "feature_column": "sma5_gt_sma60" },
+        { "feature_column": "sma60_gt_sma200" }
+      ]
+    },
+    {
+      "market": "KRW-XRP",
+      "mode": "all_true",
+      "components": [
+        { "feature_column": "sma10_gt_sma20" },
+        { "feature_column": "sma20_gt_sma120" }
+      ]
+    },
+    {
+      "market": "KRW-ADA",
+      "mode": "all_true",
+      "components": [
+        { "feature_column": "sma10_gt_sma20" },
+        { "feature_column": "sma20_gt_sma120" }
+      ]
+    },
+    {
+      "market": "KRW-DOGE",
+      "components": [
+        { "feature_column": "sma5_gt_sma400", "weight": 1.0 }
+      ]
+    },
+    {
+      "market": "KRW-AVAX",
+      "components": [
+        { "feature_column": "sma5_gt_sma400", "weight": 1.0 }
+      ]
+    }
+  ]
+}

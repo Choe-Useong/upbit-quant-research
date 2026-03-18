@@ -64,11 +64,15 @@ def build_target_weight_frame(
     if not rows:
         return target_frame
 
-    rebalance_frequency = rows[0].get("rebalance_frequency", "daily")
-    rebalance_dates = _scheduled_rebalance_dates(price_frame.index, rebalance_frequency)
     grouped_rows: dict[str, list[dict[str, str]]] = {}
     for row in rows:
         grouped_rows.setdefault(row["date_utc"], []).append(row)
+    rebalance_frequency = rows[0].get("rebalance_frequency", "daily")
+    rebalance_dates = _scheduled_rebalance_dates(
+        price_frame.index,
+        rebalance_frequency,
+        explicit_dates=grouped_rows.keys(),
+    )
 
     for date_utc in rebalance_dates:
         timestamp = pd.Timestamp(date_utc)
@@ -85,10 +89,18 @@ def build_target_weight_frame(
     return target_frame
 
 
-def _scheduled_rebalance_dates(index: pd.Index, rebalance_frequency: str) -> list[str]:
+def _scheduled_rebalance_dates(
+    index: pd.Index,
+    rebalance_frequency: str,
+    explicit_dates: Iterable[str] | None = None,
+) -> list[str]:
     timestamps = [pd.Timestamp(value) for value in index]
     if rebalance_frequency == "every_bar":
         return [timestamp.isoformat() for timestamp in timestamps]
+    if rebalance_frequency == "sparse":
+        if explicit_dates is None:
+            return []
+        return sorted(set(explicit_dates))
 
     keys: list[tuple[int, ...]] = []
     if rebalance_frequency == "daily":

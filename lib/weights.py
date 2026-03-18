@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Iterable
 
 
-WEIGHTING_METHODS = {"equal", "rank", "feature_value", "incremental_signal"}
+WEIGHTING_METHODS = {"equal", "rank", "feature_value", "incremental_signal", "fixed"}
 REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
 
 
@@ -14,6 +14,7 @@ REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
 class WeightSpec:
     weighting: str = "equal"
     gross_exposure: float = 1.0
+    fixed_weight: float | None = None
     rank_power: float = 1.0
     max_positions: int | None = None
     universe_name: str | None = None
@@ -38,6 +39,13 @@ class WeightSpec:
             return (
                 f"{prefix}__feature_value_{self.rebalance_frequency}"
                 f"_gross{self.gross_exposure:g}"
+            )
+        if self.weighting == "fixed":
+            if self.fixed_weight is None:
+                raise ValueError("fixed_weight must be provided for fixed weighting")
+            return (
+                f"{prefix}__fixed_{self.rebalance_frequency}"
+                f"_w{self.fixed_weight:g}"
             )
         if self.weighting == "incremental_signal":
             step_up = self.incremental_step_up if self.incremental_step_up is not None else self.incremental_step_size
@@ -68,6 +76,14 @@ def _equal_weights(count: int, gross_exposure: float) -> list[float]:
         return []
     value = gross_exposure / count
     return [value] * count
+
+
+def _fixed_weights(count: int, fixed_weight: float | None) -> list[float]:
+    if count <= 0:
+        return []
+    if fixed_weight is None:
+        raise ValueError("fixed_weight must be provided for fixed weighting")
+    return [fixed_weight] * count
 
 
 def _rank_weights(count: int, gross_exposure: float, rank_power: float) -> list[float]:
@@ -285,6 +301,9 @@ def build_weight_table(
         count = len(scoped_rows)
         if spec.weighting == "equal":
             weights = _equal_weights(count, spec.gross_exposure)
+            weighted_pairs = list(zip(range(count), weights))
+        elif spec.weighting == "fixed":
+            weights = _fixed_weights(count, spec.fixed_weight)
             weighted_pairs = list(zip(range(count), weights))
         elif spec.weighting == "rank":
             weights = _rank_weights(count, spec.gross_exposure, spec.rank_power)

@@ -1,36 +1,36 @@
 # 2026-03-16 Provisional Best Strategies By Asset
 
-자산별 잠정 최고 전략을 기록한다.
-기준은 `전체 AIR`, `CAGR`, `Recent 1Y/2Y AIR`, `MDD`, `Longest Recovery`를 같이 본 종합 판단이다.
+Current shortlist rewritten with a `60m-first` bias.
+The idea is simple: prefer the best usable `60m` strategy for each asset, while still noting older `240m` references where they were historically stronger on full-period comparison.
 
 ## Current Picks
 
 | Asset | Provisional Best | Timeframe | Family | AIR | CAGR | Recent 1Y AIR | Recent 2Y AIR | MDD | Longest Recovery Bars | Confidence | Note |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| BTC | `10/120 every_bar` | `60m` | `ma_cross` | 0.4200 | 68.16% | 0.4135 | 0.5362 | 36.71% | 11736 | High | 수익 최적. 여러 변형보다 기본형 유지 |
-| ETH | `5/60 every_bar` | `60m` | `ma_cross` | 0.5448 | 84.64% | 0.1818 | 0.4600 | 52.05% | 19444 | High | 전체 백테스트에선 mix가 강했지만 walk-forward OOS 기준 메인 |
-| SOL | `5/60/200 every_bar` | `60m` | `ma_stack` | 0.5686 | 68.30% | 0.6502 | 0.2505 | 45.98% | 5670 | High | `10/60` 2선보다 종합 우위. 60m 3선 메인 |
-| XRP | `10/20/120 every_bar` | `60m` | `ma_stack` | 0.3728 | 107.90% | 0.8661 | 0.5879 | 51.81% | 24140 | Medium | 메인 후보. 다만 XRP 자체 recovery가 매우 김 |
-| ADA | `1/20/120 every_bar` | `240m` | `ma_stack` | 0.4356 | 120.96% | 0.9934 |  | 43.26% | 4748 | High | 2선보다 3선 우위가 더 명확 |
-| DOGE | `1/20/200 every_bar` | `240m` | `ma_stack` | 0.4945 | 96.21% | 0.7514 |  | 40.60% | 3254 | High | 2선보다 recovery/MDD 포함 종합 우위 |
-| AVAX | `5/200 every_bar` | `240m` | `ma_cross` | 0.8724 | 35.12% | 0.7222 |  | 49.35% | 1696 | Medium | 60m도 강하지만 현재까지는 240m 우위 |
+| BTC | `10/120 every_bar` | `60m` | `ma_cross` | 0.4200 | 68.16% | 0.4135 | 0.5362 | 36.71% | 11736 | High | Return-first main pick. |
+| ETH | `5/60 every_bar` | `60m` | `ma_cross` | 0.5448 | 84.64% | 0.1818 | 0.4600 | 52.05% | 19444 | High | Walk-forward OOS main pick. |
+| SOL | `5/60/200 every_bar` | `60m` | `ma_stack` | 0.5686 | 68.30% | 0.6502 | 0.2505 | 45.98% | 5670 | High | Best 60m three-line profile. |
+| XRP | `10/20/120 every_bar` | `60m` | `ma_stack` | 0.3728 | 107.90% | 0.8661 | 0.5879 | 51.81% | 24140 | Medium | Main 60m pick despite XRP's naturally long recovery profile. |
+| ADA | `10/20/120 every_bar` | `60m` | `ma_stack` | 0.2617 | 109.00% | 0.6808 | 0.6076 | 52.65% | 19998 | Medium | 60m-first main. Older 240m `1/20/120` remained stronger overall. |
+| DOGE | `5/400 every_bar` | `60m` | `ma_cross` | 0.4695 | 78.27% | 0.7874 |  | 61.44% | 22568 | Medium | 60m-first robust pick. `20/200` stayed stronger on headline full-period return. |
+| AVAX | `5/400 every_bar` | `60m` | `ma_cross` | 0.8148 | 36.68% | 0.6883 |  | 44.48% | 7296 | Medium | 60m-first robust pick. Older 240m `5/200` remained stronger in the old full-period comparison. |
 
 ## ETH Sub Pick
 
 - Main: `60m 5/60 every_bar`
 - Sub: `60m 3/400 every_bar`
 
-워크포워드 해석:
-- `5/60`은 winner share가 가장 높았다.
-- `3/400`은 보수적 대안으로 OOS median AIR가 더 좋았다.
-- `5/60 + 3/400 score exposure`는 전체 구간 백테스트에선 강했지만 walk-forward OOS에선 보류다.
+Interpretation:
+- `5/60` won most walk-forward folds.
+- `3/400` had the cleaner conservative OOS profile.
+- `5/60 + 3/400 score exposure` was strong on full backtest but weak in walk-forward OOS, so it stays out of the main slot.
 
 ## XRP Sub Pick
 
 - Main: `60m 10/20/120 every_bar`
 - Sub: `60m 10/20/120 + 10/400 score exposure`
 
-서브 혼합 성과:
+Sub mix metrics:
 - AIR `0.3201`
 - CAGR `91.99%`
 - Recent 1Y AIR `0.4246`
@@ -38,15 +38,54 @@
 - MDD `50.26%`
 - Longest Recovery `12209`
 
-해석:
-- 메인 대비 수익은 내려간다.
-- 대신 recovery가 `24140 -> 12209`로 크게 줄어든다.
-- 따라서 XRP에선 메인은 `10/20/120`, 서브 안전판은 `10/20/120 + 10/400 혼합`으로 둔다.
+Interpretation:
+- The mix gives up return versus the main.
+- But it cuts recovery roughly in half versus `10/20/120`.
+- So XRP keeps `10/20/120` as main and the mix as the practical compromise.
+
+## ADA Sub Pick
+
+- Main: `60m 10/20/120 every_bar`
+- Sub: `60m 5/120/400 every_bar`
+
+Interpretation:
+- `10/20/120` looked cleaner on candidate OOS robustness.
+- `5/120/400` won more folds in walk-forward, so it stays as the main 60m alternative.
+- The older `240m 1/20/120` is still worth remembering as the stronger non-60m reference.
+
+## DOGE Sub Pick
+
+- Main: `60m 5/400 every_bar`
+- Sub: `60m 20/200 + 5/400 score exposure`
+
+Sub mix metrics:
+- AIR `0.4798`
+- CAGR `82.37%`
+- Recent 1Y AIR `0.7331`
+- Recent 2Y AIR `0.5560`
+- MDD `51.04%`
+- Longest Recovery `12932`
+
+Interpretation:
+- `5/400` looked better on 60m robustness.
+- `20/200` still carried the stronger return-first profile.
+- The mix stays as a useful 60m compromise because it keeps more upside than `5/400` while softening the `20/200` profile.
+
+## AVAX Sub Pick
+
+- Main: `60m 5/400 every_bar`
+- Sub: `60m 1/400 every_bar`
+
+Interpretation:
+- `5/400` is the cleaner 60m robust pick.
+- `1/400` won more folds, but only in a 3-fold sample.
+- The older `240m 5/200` remains the stronger non-60m reference.
 
 ## Notes
 
-- `Recent 2Y AIR`가 비어 있는 자산은 아직 2Y 컬럼으로 재실행하지 않았다.
-- `BTC`는 방어형 대안으로 `240m 5/20/200`을 계속 보관한다.
-- `ETH`는 walk-forward OOS 기준으로 `5/60`이 메인이고, `3/400`은 보수적 대안이다.
-- `SOL`은 `60m 3선 5/60/200`에서 메인이 바뀌었다.
-- `XRP`는 메인을 기록하되, 자산 특성상 recovery가 길다는 점을 항상 같이 본다.
+- `Recent 2Y AIR` is blank for rows where that column was not refreshed in the source summary.
+- `BTC` remains the cleanest 60m main among all assets.
+- `ETH` is now a clear 60m asset after walk-forward validation.
+- `SOL` keeps the strong `5/60/200` 60m three-line main even though walk-forward sample size was short.
+- `XRP` remains usable only with explicit awareness of its long recovery behavior.
+- `ADA`, `DOGE`, and `AVAX` are now written in a 60m-first style, but their older 240m references are still worth remembering.

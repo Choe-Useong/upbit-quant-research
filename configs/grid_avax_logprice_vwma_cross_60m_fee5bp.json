@@ -1,0 +1,71 @@
+{
+  "candle_dir": "data/upbit/minutes/60",
+  "timeframe": "60m",
+  "out_dir": "data/grid/avax_logprice_vwma_cross_60m_fee5bp",
+  "run_name_template": "avax_logprice_vwma_60m_{short}_{long}_{rebalance_frequency}_fee5bp",
+  "rolling_ir_windows": [365, 730],
+  "save_rolling_ir_plots": true,
+  "top_curve_count": 5,
+  "ranking_metric": "Total Return [%]",
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        { "kind": "log", "params": { "mode": "log" } },
+        { "kind": "vwma", "params": { "window": "{short}" } }
+      ],
+      "column_name": "logvwma_{short}"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        { "kind": "log", "params": { "mode": "log" } },
+        { "kind": "vwma", "params": { "window": "{long}" } }
+      ],
+      "column_name": "logvwma_{long}"
+    },
+    {
+      "compare": {
+        "left_feature": "logvwma_{short}",
+        "operator": "gt",
+        "right_feature": "logvwma_{long}"
+      },
+      "column_name": "logvwma{short}_gt_logvwma{long}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "logvwma{short}_gt_logvwma{long}",
+    "lag": 1,
+    "mode": "top_n",
+    "top_n": 1,
+    "ascending": false,
+    "allowed_markets": ["KRW-AVAX"],
+    "value_filters": [
+      {
+        "feature_column": "logvwma{short}_gt_logvwma{long}",
+        "operator": "gt",
+        "value": 0.0,
+        "lag": 1
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}"
+  },
+  "vectorbt_spec_template": {
+    "price_column": "trade_price",
+    "init_cash": 1000000.0,
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-AVAX"
+  },
+  "grid": {
+    "short": [5, 10, 20, 30],
+    "long": [10, 20, 60, 120, 200, 400],
+    "rebalance_frequency": ["every_bar"]
+  },
+  "constraints": ["short < long"]
+}
