@@ -8,12 +8,12 @@ The idea is simple: prefer the best usable `60m` strategy for each asset, while 
 | Asset | Provisional Best | Timeframe | Family | AIR | CAGR | Recent 1Y AIR | Recent 2Y AIR | MDD | Longest Recovery Bars | Confidence | Note |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
 | BTC | `10/120 every_bar` | `60m` | `ma_cross` | 0.4200 | 68.16% | 0.4135 | 0.5362 | 36.71% | 11736 | High | Return-first main pick. |
-| ETH | `5/60 every_bar` | `60m` | `ma_cross` | 0.5448 | 84.64% | 0.1818 | 0.4600 | 52.05% | 19444 | High | Walk-forward OOS main pick. |
-| SOL | `5/60/200 every_bar` | `60m` | `ma_stack` | 0.5686 | 68.30% | 0.6502 | 0.2505 | 45.98% | 5670 | High | Best 60m three-line profile. |
+| ETH | `5/60 every_bar` | `60m` | `ma_cross` | 0.5448 | 84.64% | 0.1818 | 0.4600 | 52.05% | 19444 | High | Walk-forward OOS main pick. `log-price+log-volume VWMA 5/400` looked interesting on full sample but is still a secondary experiment. |
+| SOL | `logprice_vwma 5/60 every_bar` | `60m` | `logprice_vwma` | 0.6714 | 62.17% | 0.3834 | 0.5832 | 50.66% | 6870 | Medium | Promoted on candidate OOS robustness. Old `5/60/200` still had higher fold wins, but only in a 3-fold sample. |
 | XRP | `10/20/120 every_bar` | `60m` | `ma_stack` | 0.3728 | 107.90% | 0.8661 | 0.5879 | 51.81% | 24140 | Medium | Main 60m pick despite XRP's naturally long recovery profile. |
 | ADA | `10/20/120 every_bar` | `60m` | `ma_stack` | 0.2617 | 109.00% | 0.6808 | 0.6076 | 52.65% | 19998 | Medium | 60m-first main. Older 240m `1/20/120` remained stronger overall. |
 | DOGE | `5/400 every_bar` | `60m` | `ma_cross` | 0.4695 | 78.27% | 0.7874 |  | 61.44% | 22568 | Medium | 60m-first robust pick. `20/200` stayed stronger on headline full-period return. |
-| AVAX | `5/400 every_bar` | `60m` | `ma_cross` | 0.8148 | 36.68% | 0.6883 |  | 44.48% | 7296 | Medium | 60m-first robust pick. Older 240m `5/200` remained stronger in the old full-period comparison. |
+| AVAX | `vwgm_logvol 5/400 every_bar` | `60m` | `vwgm_logvol` | 0.8646 | 40.35% | 0.6981 | 0.9171 | 44.11% | 7297 | Medium | Experimental log-price plus log-volume geometric-mean variant now leads the 60m shortlist, but confidence remains capped by the short 3-fold AVAX walk-forward sample. |
 
 ## ETH Sub Pick
 
@@ -24,6 +24,7 @@ Interpretation:
 - `5/60` won most walk-forward folds.
 - `3/400` had the cleaner conservative OOS profile.
 - `5/60 + 3/400 score exposure` was strong on full backtest but weak in walk-forward OOS, so it stays out of the main slot.
+- `log-price+log-volume VWMA 5/400` is worth remembering as an experimental transform candidate, but it has not earned promotion over `3/400` yet.
 
 ## XRP Sub Pick
 
@@ -73,19 +74,19 @@ Interpretation:
 
 ## AVAX Sub Pick
 
-- Main: `60m 5/400 every_bar`
-- Sub: `60m 1/400 every_bar`
+- Main: `60m vwgm_logvol 5/400 every_bar`
+- Sub: `60m 5/400 every_bar`
 
 Interpretation:
-- `5/400` is the cleaner 60m robust pick.
-- `1/400` won more folds, but only in a 3-fold sample.
-- The older `240m 5/200` remains the stronger non-60m reference.
+- `vwgm_logvol 5/400` beat the prior `SMA 5/400` on both full-sample headline metrics and the short AVAX OOS candidate check.
+- Confidence stays medium because AVAX still only has a 3-fold walk-forward sample.
+- The older `240m 5/200` remains the stronger non-60m reference, and plain `SMA 5/400` stays as the conservative 60m fallback.
 
 ## Notes
 
 - `Recent 2Y AIR` is blank for rows where that column was not refreshed in the source summary.
 - `BTC` remains the cleanest 60m main among all assets.
 - `ETH` is now a clear 60m asset after walk-forward validation.
-- `SOL` keeps the strong `5/60/200` 60m three-line main even though walk-forward sample size was short.
+- `SOL` now leans toward `logprice_vwma 5/60` because candidate OOS robustness looked much stronger than `5/60/200`, even though the walk-forward sample is still only 3 folds.
 - `XRP` remains usable only with explicit awareness of its long recovery behavior.
 - `ADA`, `DOGE`, and `AVAX` are now written in a 60m-first style, but their older 240m references are still worth remembering.

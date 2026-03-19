@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 import sys
 
 if str(ROOT_DIR) not in sys.path:

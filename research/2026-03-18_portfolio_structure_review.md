@@ -54,7 +54,7 @@ Problem:
 
 Fix:
 - added `sparse` rebalance handling in [lib/vectorbt_adapter.py](/c:/Users/working/Desktop/Coin%20Project/lib/vectorbt_adapter.py)
-- updated [scripts/build_change_only_weights.py](/c:/Users/working/Desktop/Coin%20Project/scripts/build_change_only_weights.py) to emit `rebalance_frequency = sparse`
+- updated [scripts/experiments/portfolio/build_change_only_weights.py](/c:/Users/working/Desktop/Coin%20Project/scripts/experiments/portfolio/build_change_only_weights.py) to emit `rebalance_frequency = sparse`
 
 After the fix:
 - `change-only` means exactly what was intended:

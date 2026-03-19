@@ -1,0 +1,95 @@
+{
+  "candle_dir": "data/upbit/minutes/60",
+  "timeframe": "60m",
+  "out_dir": "data/grid/btc_sma_slope_longcash_60m_fee5bp",
+  "run_name_template": "btc_sma_slope_longcash_60m_ma{ma_window}_slope{slope_window}_every_bar_fee5bp",
+  "compute_rolling_ir": false,
+  "save_summary_plots": false,
+  "save_rolling_ir_plots": false,
+  "top_curve_count": 0,
+  "ranking_metric": "Annualized Information Ratio",
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{ma_window}"
+          }
+        }
+      ],
+      "column_name": "sma_{ma_window}"
+    },
+    {
+      "source": "sma_{ma_window}",
+      "steps": [
+        {
+          "kind": "simple_return",
+          "params": {
+            "window": "{slope_window}"
+          }
+        }
+      ],
+      "column_name": "sma_{ma_window}_ret_{slope_window}"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_{ma_window}_ret_{slope_window}",
+        "operator": "gt",
+        "right_value": 0.0
+      },
+      "column_name": "sma_{ma_window}_ret_{slope_window}_gt0"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "sma_{ma_window}_ret_{slope_window}_gt0",
+    "lag": 1,
+    "mode": "top_n",
+    "top_n": 1,
+    "ascending": false,
+    "allowed_markets": [
+      "KRW-BTC"
+    ],
+    "value_filters": [
+      {
+        "feature_column": "sma_{ma_window}_ret_{slope_window}_gt0",
+        "operator": "gt",
+        "value": 0.0,
+        "lag": 1
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "every_bar"
+  },
+  "vectorbt_spec_template": {
+    "price_column": "trade_price",
+    "init_cash": 1000000.0,
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "ma_window": [
+      200,
+      400,
+      800,
+      1200,
+      1600,
+      2000,
+      3000
+    ],
+    "slope_window": [
+      1,
+      6,
+      24,
+      72,
+      168,
+      336
+    ]
+  }
+}
