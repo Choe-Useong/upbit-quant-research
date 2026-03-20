@@ -56,6 +56,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--oos-months", type=int, default=None, help="Override out-of-sample months")
     parser.add_argument("--step-months", type=int, default=None, help="Override step months")
     parser.add_argument(
+        "--window-mode",
+        choices=("rolling", "expanding"),
+        default="rolling",
+        help="Use a fixed rolling IS window or an expanding IS window anchored at the first timestamp",
+    )
+    parser.add_argument(
         "--ranking-metric",
         default="Annualized Information Ratio",
         help="IS metric used to choose each fold winner",
@@ -105,11 +111,13 @@ def _build_folds(
     is_months: int,
     oos_months: int,
     step_months: int,
+    window_mode: str,
 ) -> list[dict[str, pd.Timestamp]]:
     if timestamps.empty:
         return []
     folds: list[dict[str, pd.Timestamp]] = []
-    current_start = pd.Timestamp(timestamps.min())
+    initial_start = pd.Timestamp(timestamps.min())
+    current_start = initial_start
     max_timestamp = pd.Timestamp(timestamps.max())
     while True:
         is_end = current_start + pd.DateOffset(months=is_months)
@@ -118,7 +126,7 @@ def _build_folds(
             break
         folds.append(
             {
-                "is_start": current_start,
+                "is_start": initial_start if window_mode == "expanding" else current_start,
                 "is_end": is_end,
                 "oos_start": is_end,
                 "oos_end": oos_end,
@@ -313,6 +321,7 @@ def main() -> None:
     root_oos_months = int(args.oos_months or payload.get("oos_months", 12))
     root_step_months = int(args.step_months or payload.get("step_months", 6))
     ranking_metric = args.ranking_metric
+    window_mode = args.window_mode
 
     fold_candidate_rows: list[dict[str, Any]] = []
     fold_winner_rows: list[dict[str, Any]] = []
@@ -329,7 +338,7 @@ def main() -> None:
         candle_rows = load_all_candles(candle_dir)
         primary_market = _primary_market(asset_payload)
         timestamps = _available_timestamps(candle_rows, primary_market)
-        folds = _build_folds(timestamps, is_months, oos_months, step_months)
+        folds = _build_folds(timestamps, is_months, oos_months, step_months, window_mode)
         print(f"{asset}: {len(folds)} folds")
 
         asset_out_dir = out_dir / asset.lower()

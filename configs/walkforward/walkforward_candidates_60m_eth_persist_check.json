@@ -1,0 +1,146 @@
+{
+  "timeframe": "60m",
+  "candle_dir": "data/upbit/minutes/60",
+  "is_months": 18,
+  "oos_months": 6,
+  "step_months": 3,
+  "assets": [
+    {
+      "asset": "ETH",
+      "benchmark_market": "KRW-ETH",
+      "primary_market": "KRW-ETH",
+      "candidates": [
+        {
+          "label": "eth_5_60",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_persist2",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal_raw" },
+            { "source": "signal_raw", "steps": [{ "kind": "rolling_sum", "params": { "window": 2 } }], "column_name": "signal_sum2" },
+            { "compare": { "left_feature": "signal_sum2", "operator": "ge", "right_value": 2 }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_persist2_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_persist3",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal_raw" },
+            { "source": "signal_raw", "steps": [{ "kind": "rolling_sum", "params": { "window": 3 } }], "column_name": "signal_sum3" },
+            { "compare": { "left_feature": "signal_sum3", "operator": "ge", "right_value": 3 }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_persist3_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_persist6",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal_raw" },
+            { "source": "signal_raw", "steps": [{ "kind": "rolling_sum", "params": { "window": 6 } }], "column_name": "signal_sum6" },
+            { "compare": { "left_feature": "signal_sum6", "operator": "ge", "right_value": 6 }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_persist6_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_persist8",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal_raw" },
+            { "source": "signal_raw", "steps": [{ "kind": "rolling_sum", "params": { "window": 8 } }], "column_name": "signal_sum8" },
+            { "compare": { "left_feature": "signal_sum8", "operator": "ge", "right_value": 8 }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_persist8_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        },
+        {
+          "label": "eth_5_60_persist12",
+          "feature_specs": [
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 5 } }], "column_name": "sma_5" },
+            { "source": "trade_price", "steps": [{ "kind": "rolling_mean", "params": { "window": 60 } }], "column_name": "sma_60" },
+            { "compare": { "left_feature": "sma_5", "operator": "gt", "right_feature": "sma_60" }, "column_name": "signal_raw" },
+            { "source": "signal_raw", "steps": [{ "kind": "rolling_sum", "params": { "window": 12 } }], "column_name": "signal_sum12" },
+            { "compare": { "left_feature": "signal_sum12", "operator": "ge", "right_value": 12 }, "column_name": "signal" }
+          ],
+          "universe_spec": {
+            "name": "eth_ma_60m_5_60_persist12_every_bar_fee5bp",
+            "feature_column": "signal",
+            "lag": 1,
+            "mode": "top_n",
+            "top_n": 1,
+            "ascending": false,
+            "allowed_markets": ["KRW-ETH"],
+            "value_filters": [{ "feature_column": "signal", "operator": "gt", "value": 0.0, "lag": 1 }]
+          },
+          "weight_spec": { "weighting": "equal", "gross_exposure": 1.0, "rebalance_frequency": "every_bar" },
+          "vectorbt_spec": { "price_column": "trade_price", "init_cash": 1000000.0, "fees": 0.0005, "slippage": 0.0 }
+        }
+      ]
+    }
+  ]
+}
