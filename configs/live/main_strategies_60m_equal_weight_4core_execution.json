@@ -1,0 +1,11 @@
+{
+  "strategy_type": "weights_csv",
+  "portfolio_name": "main_strategies_60m_equal_weight_4core",
+  "candle_dir": "data/upbit/minutes/60",
+  "weights_csv": "data/portfolio/main_strategies_60m_equal_weight_4core/weights.csv",
+  "refresh_candles": 240,
+  "min_order_krw": 5000,
+  "only_markets": [],
+  "exclude_markets": [],
+  "managed_markets": []
+}

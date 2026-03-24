@@ -1,0 +1,47 @@
+[
+  {
+    "source": "candle_acc_trade_price",
+    "steps": [
+      {
+        "kind": "rolling_sum",
+        "params": {
+          "window": 24
+        }
+      }
+    ],
+    "column_name": "turnover_24h"
+  },
+  {
+    "source": "turnover_24h",
+    "steps": [
+      {
+        "kind": "rolling_percentile",
+        "params": {
+          "window": 720
+        }
+      }
+    ],
+    "column_name": "turnover_24h_ts_pct_30d"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "momentum",
+        "params": {
+          "window": 48
+        }
+      }
+    ],
+    "column_name": "mom_48"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

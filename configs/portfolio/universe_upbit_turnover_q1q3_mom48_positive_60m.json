@@ -1,0 +1,41 @@
+{
+  "name": "upbit_turn24_tsperc30d_q1q3_mom48_positive_60m_lag1",
+  "feature_column": "mom_48",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 999,
+  "ascending": false,
+  "exclude_warnings": true,
+  "min_age_days": 180,
+  "excluded_markets": [
+    "KRW-BTC",
+    "KRW-ETH",
+    "KRW-XRP",
+    "KRW-ADA",
+    "KRW-DOGE",
+    "KRW-SOL",
+    "KRW-AVAX"
+  ],
+  "value_filters": [
+    {
+      "feature_column": "mom_48",
+      "operator": "gt",
+      "value": 0.0,
+      "lag": 1
+    }
+  ],
+  "rank_filters": [
+    {
+      "feature_column": "turnover_24h_ts_pct_30d",
+      "mode": "quantile",
+      "lag": 1,
+      "quantiles": 5,
+      "bucket_values": [
+        1,
+        2,
+        3
+      ],
+      "ascending": true
+    }
+  ]
+}

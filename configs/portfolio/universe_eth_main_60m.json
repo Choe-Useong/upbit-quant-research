@@ -1,0 +1,19 @@
+{
+  "name": "eth_main_60m_lag1",
+  "feature_column": "custom_score",
+  "lag": 1,
+  "mode": "top_n",
+  "top_n": 1,
+  "ascending": false,
+  "allowed_markets": [
+    "KRW-ETH"
+  ],
+  "value_filters": [
+    {
+      "feature_column": "custom_score",
+      "operator": "gt",
+      "value": 0.0,
+      "lag": 1
+    }
+  ]
+}

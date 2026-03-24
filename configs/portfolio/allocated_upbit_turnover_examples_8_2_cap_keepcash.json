@@ -1,0 +1,22 @@
+{
+  "portfolio_name": "allocated_upbit_turnover_examples_8_2_cap_keepcash",
+  "portfolio_inactive_mode": "keep_cash",
+  "cap_overflow_mode": "keep_cash",
+  "market_caps": {
+    "KRW-STEEM": 0.5
+  },
+  "sleeves": [
+    {
+      "name": "turnover_q1_momlow25",
+      "weights_csv": "data/portfolio/upbit_turnover_q1_momlow25_60m/weights.csv",
+      "capital_weight": 0.8,
+      "weight_scale_mode": "keep_source"
+    },
+    {
+      "name": "turnover_q12_momq1",
+      "weights_csv": "data/portfolio/upbit_turnover_q12_momq1_60m/weights.csv",
+      "capital_weight": 0.2,
+      "weight_scale_mode": "keep_source"
+    }
+  ]
+}

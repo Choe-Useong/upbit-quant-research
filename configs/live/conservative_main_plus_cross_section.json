@@ -1,0 +1,25 @@
+{
+  "strategy_type": "sleeve_portfolio",
+  "portfolio_name": "conservative_main_plus_cross_section",
+  "refresh_candles": 240,
+  "min_order_krw": 5000,
+  "portfolio_inactive_mode": "keep_cash",
+  "cap_overflow_mode": "keep_cash",
+  "market_caps": {},
+  "only_markets": [],
+  "exclude_markets": [],
+  "sleeves": [
+    {
+      "name": "main_60m",
+      "capital_weight": 0.8,
+      "weight_scale_mode": "keep_source",
+      "execution_config_json": "configs/live/main_portfolio_60m_execution.json"
+    },
+    {
+      "name": "alt_cross_section",
+      "capital_weight": 0.2,
+      "weight_scale_mode": "keep_source",
+      "execution_config_json": "configs/live/upbit_turnover_q1_momlow25_execution.json"
+    }
+  ]
+}

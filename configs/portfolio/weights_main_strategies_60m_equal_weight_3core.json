@@ -1,0 +1,7 @@
+{
+  "weighting": "fixed",
+  "fixed_weight": 0.3333333333333333,
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "every_bar",
+  "universe_name": "main_strategies_60m_equal_weight_3core_lag1"
+}

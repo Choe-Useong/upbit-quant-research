@@ -1,0 +1,13 @@
+{
+  "strategy_type": "portfolio_pipeline",
+  "portfolio_name": "main_strategies_60m_equal_weight_lag1",
+  "candle_dir": "data/upbit/minutes/60",
+  "features_spec_json": "configs/portfolio/features_main_strategies_60m_common.json",
+  "market_scores_spec_json": "configs/portfolio/market_scores_main_strategies_60m_equal_weight.json",
+  "universe_spec_json": "configs/portfolio/universe_main_strategies_60m_equal_weight.json",
+  "weights_spec_json": "configs/portfolio/weights_main_strategies_60m_equal_weight.json",
+  "refresh_candles": 240,
+  "min_order_krw": 5000,
+  "only_markets": [],
+  "exclude_markets": []
+}

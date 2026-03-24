@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import http.client
 import json
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -13,6 +15,8 @@ from typing import Iterator
 BASE_URL = "https://api.upbit.com"
 DEFAULT_PAUSE_SECONDS = 0.12
 DEFAULT_BATCH_SIZE = 200
+DEFAULT_REQUEST_RETRIES = 8
+DEFAULT_RETRY_BACKOFF_SECONDS = 1.5
 
 
 @dataclass(frozen=True)
@@ -49,10 +53,28 @@ def request_json(path: str, params: dict[str, object] | None = None) -> list[dic
         query = "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(
         f"{BASE_URL}{path}{query}",
-        headers={"Accept": "application/json"},
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "coin-project-upbit-collector/1.0",
+        },
     )
-    with urllib.request.urlopen(req, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error: Exception | None = None
+    for attempt in range(1, DEFAULT_REQUEST_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code not in {408, 429, 500, 502, 503, 504} or attempt >= DEFAULT_REQUEST_RETRIES:
+                raise
+        except (urllib.error.URLError, TimeoutError, socket.timeout, http.client.RemoteDisconnected) as exc:
+            last_error = exc
+            if attempt >= DEFAULT_REQUEST_RETRIES:
+                raise
+        time.sleep(DEFAULT_RETRY_BACKOFF_SECONDS * attempt)
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"Request failed unexpectedly for {path}")
 
 
 def list_markets(quote: str = "KRW", include_warnings: bool = True) -> list[Market]:

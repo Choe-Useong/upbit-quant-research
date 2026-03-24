@@ -1,0 +1,6 @@
+{
+  "weighting": "equal",
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "daily",
+  "universe_name": "upbit_turn24_tsperc30d_q1q3_mom48_positive_60m_lag1"
+}

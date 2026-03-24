@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Iterable, Sequence
 
+import pandas as pd
+
 from lib.upbit_collector import CandleRow
 
 
@@ -411,6 +413,12 @@ def _rolling_std(values: Sequence[float | None], window: int) -> list[float | No
     return result
 
 
+def _rolling_percentile(values: Sequence[float | None], window: int) -> list[float | None]:
+    series = pd.Series(values, dtype="float64")
+    ranked = series.rolling(window, min_periods=window).rank(pct=True)
+    return [None if pd.isna(value) else float(value) for value in ranked]
+
+
 def _pct_change(values: Sequence[float | None], periods: int) -> list[float | None]:
     result: list[float | None] = []
     for idx, value in enumerate(values):
@@ -762,6 +770,15 @@ def transform_rolling_std(
     return _apply_by_market(rows, values, lambda group, _: _rolling_std(group, window), params)
 
 
+def transform_rolling_percentile(
+    rows: list[dict[str, str]],
+    values: list[float | None],
+    params: dict[str, int | float | str],
+) -> list[float | None]:
+    window = int(params["window"])
+    return _apply_by_market(rows, values, lambda group, _: _rolling_percentile(group, window), params)
+
+
 def transform_delta(
     rows: list[dict[str, str]],
     values: list[float | None],
@@ -1055,6 +1072,7 @@ TRANSFORM_REGISTRY: dict[str, TransformFn] = {
     "log": transform_log,
     "rolling_mean": transform_rolling_mean,
     "rolling_std": transform_rolling_std,
+    "rolling_percentile": transform_rolling_percentile,
     "ewma": transform_ewma,
     "rolling_sum": transform_rolling_sum,
     "vwma": transform_vwma,

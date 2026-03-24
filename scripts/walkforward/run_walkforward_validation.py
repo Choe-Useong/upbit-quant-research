@@ -82,6 +82,15 @@ def _filter_rows_by_window(candle_rows: list, start: pd.Timestamp, end: pd.Times
     return filtered
 
 
+def _filter_rows_before_end(candle_rows: list, end: pd.Timestamp) -> list:
+    filtered = []
+    for row in candle_rows:
+        timestamp = _parse_timestamp(row.date_utc)
+        if timestamp < end:
+            filtered.append(row)
+    return filtered
+
+
 def _required_markets(candidate: dict[str, Any], benchmark_market: str) -> tuple[str, ...]:
     markets = set(candidate["universe_spec"].get("allowed_markets", []))
     if benchmark_market:
@@ -141,6 +150,8 @@ def _run_candidate(
     candle_rows: list,
     benchmark_market: str,
     timeframe: str,
+    evaluation_start: pd.Timestamp | None = None,
+    evaluation_end: pd.Timestamp | None = None,
 ) -> dict[str, Any]:
     feature_specs = _load_feature_specs_from_payload(candidate["feature_specs"])
     universe_spec = _load_universe_spec_from_payload(candidate["universe_spec"])
@@ -156,11 +167,23 @@ def _run_candidate(
     feature_rows = build_feature_table(candle_rows, feature_specs)
     universe_rows = build_universe_table(feature_rows, universe_spec)
     weight_rows = build_weight_table(universe_rows, weight_spec)
+    if evaluation_start is not None and evaluation_end is not None:
+        weight_rows = [
+            row
+            for row in weight_rows
+            if evaluation_start <= pd.Timestamp(row["date_utc"]) < evaluation_end
+        ]
     if not weight_rows:
         return {"status": "empty_weights"}
 
     required_markets = _required_markets(candidate, benchmark_market)
     run_candle_rows = [row for row in candle_rows if row.market in required_markets]
+    if evaluation_start is not None and evaluation_end is not None:
+        run_candle_rows = [
+            row
+            for row in run_candle_rows
+            if evaluation_start <= _parse_timestamp(row.date_utc) < evaluation_end
+        ]
     price_frame = build_price_frame(run_candle_rows, price_column=vectorbt_spec.price_column)
     if price_frame.empty:
         return {"status": "empty_prices"}
@@ -346,16 +369,30 @@ def main() -> None:
 
         for fold_idx, fold in enumerate(folds, start=1):
             fold_label = f"fold_{fold_idx:02d}"
-            is_rows = _filter_rows_by_window(candle_rows, fold["is_start"], fold["is_end"])
-            oos_rows = _filter_rows_by_window(candle_rows, fold["oos_start"], fold["oos_end"])
+            is_rows = _filter_rows_before_end(candle_rows, fold["is_end"])
+            oos_rows = _filter_rows_before_end(candle_rows, fold["oos_end"])
             if not is_rows or not oos_rows:
                 continue
 
             candidate_is_rows: list[dict[str, Any]] = []
             for candidate in asset_payload["candidates"]:
                 label = str(candidate["label"])
-                is_result = _run_candidate(candidate, is_rows, benchmark_market, timeframe)
-                oos_result = _run_candidate(candidate, oos_rows, benchmark_market, timeframe)
+                is_result = _run_candidate(
+                    candidate,
+                    is_rows,
+                    benchmark_market,
+                    timeframe,
+                    evaluation_start=fold["is_start"],
+                    evaluation_end=fold["is_end"],
+                )
+                oos_result = _run_candidate(
+                    candidate,
+                    oos_rows,
+                    benchmark_market,
+                    timeframe,
+                    evaluation_start=fold["oos_start"],
+                    evaluation_end=fold["oos_end"],
+                )
                 row = {
                     "asset": asset,
                     "timeframe": timeframe,

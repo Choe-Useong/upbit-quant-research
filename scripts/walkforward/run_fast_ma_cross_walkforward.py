@@ -50,6 +50,174 @@ def _safe_float(value: Any) -> float:
     return float(value)
 
 
+def _render_template(value: Any, combo: dict[str, Any]) -> Any:
+    if isinstance(value, str):
+        return value.format(**combo)
+    if isinstance(value, list):
+        return [_render_template(item, combo) for item in value]
+    if isinstance(value, dict):
+        return {key: _render_template(item, combo) for key, item in value.items()}
+    return value
+
+
+def _gather_rolling_mean_windows(feature_specs: list[dict[str, Any]]) -> set[int]:
+    windows: set[int] = set()
+    for spec in feature_specs:
+        source = spec.get("source")
+        steps = spec.get("steps", [])
+        if source == "trade_price" and steps:
+            for step in steps:
+                if step.get("kind") == "rolling_mean":
+                    windows.add(int(step["params"]["window"]))
+    return windows
+
+
+def _compare_series(
+    left: pd.Series,
+    operator: str,
+    right_series: pd.Series | None = None,
+    right_value: float | None = None,
+) -> pd.Series:
+    if right_series is not None:
+        if operator == "gt":
+            return left > right_series
+        if operator == "ge":
+            return left >= right_series
+        if operator == "lt":
+            return left < right_series
+        if operator == "le":
+            return left <= right_series
+        if operator == "eq":
+            return left == right_series
+    if right_value is not None:
+        if operator == "gt":
+            return left > right_value
+        if operator == "ge":
+            return left >= right_value
+        if operator == "lt":
+            return left < right_value
+        if operator == "le":
+            return left <= right_value
+        if operator == "eq":
+            return left == right_value
+    raise ValueError(f"Unsupported compare operator or operands: {operator}")
+
+
+def _logical_series(operator: str, inputs: list[pd.Series]) -> pd.Series:
+    if not inputs:
+        raise ValueError("Logical operation requires at least one input")
+    if operator == "not":
+        if len(inputs) != 1:
+            raise ValueError("Logical not requires exactly one input")
+        return ~inputs[0].astype(bool)
+
+    result = inputs[0].astype(bool)
+    for series in inputs[1:]:
+        if operator == "and":
+            result = result & series.astype(bool)
+        elif operator == "or":
+            result = result | series.astype(bool)
+        else:
+            raise ValueError(f"Unsupported logical operator: {operator}")
+    return result
+
+
+def _holding_state_series(entry_signal: pd.Series, exit_signal: pd.Series) -> pd.Series:
+    if not entry_signal.index.equals(exit_signal.index):
+        raise ValueError("Holding state inputs must share the same index")
+
+    holding = False
+    values: list[bool] = []
+    for entry_value, exit_value in zip(entry_signal.astype(bool), exit_signal.astype(bool)):
+        if holding:
+            if exit_value:
+                holding = False
+        elif entry_value:
+            holding = True
+        values.append(holding)
+    return pd.Series(values, index=entry_signal.index, dtype=bool)
+
+
+def _build_signal_from_feature_specs(
+    feature_specs: list[dict[str, Any]],
+    price: pd.Series,
+    ma_map: dict[int, pd.Series],
+) -> pd.Series:
+    features: dict[str, pd.Series] = {"trade_price": price}
+    final_column_name: str | None = None
+
+    for spec in feature_specs:
+        column_name = str(spec["column_name"])
+        final_column_name = column_name
+
+        if "compare" in spec:
+            compare = spec["compare"]
+            left_feature = str(compare["left_feature"])
+            operator = str(compare["operator"])
+            left_series = features[left_feature]
+            if "right_feature" in compare:
+                right_feature = str(compare["right_feature"])
+                features[column_name] = _compare_series(
+                    left_series,
+                    operator,
+                    right_series=features[right_feature],
+                )
+            else:
+                features[column_name] = _compare_series(
+                    left_series,
+                    operator,
+                    right_value=float(compare["right_value"]),
+                )
+            continue
+
+        if "logical" in spec:
+            logical = spec["logical"]
+            operator = str(logical["operator"])
+            input_names = [str(name) for name in logical["features"]]
+            features[column_name] = _logical_series(operator, [features[name] for name in input_names])
+            continue
+
+        if "state" in spec:
+            state = spec["state"]
+            entry_feature = str(state["entry_feature"])
+            exit_feature = str(state["exit_feature"])
+            features[column_name] = _holding_state_series(
+                features[entry_feature],
+                features[exit_feature],
+            )
+            continue
+
+        source = str(spec.get("source"))
+        steps = list(spec.get("steps", []))
+        if source == "trade_price" and steps:
+            current_series = price
+            for step in steps:
+                kind = str(step["kind"])
+                if kind == "rolling_mean":
+                    current_series = ma_map[int(step["params"]["window"])]
+                else:
+                    raise ValueError(f"Unsupported price step kind in fast runner: {kind}")
+            features[column_name] = current_series
+            continue
+
+        if source in features and steps:
+            current_series = features[source]
+            for step in steps:
+                kind = str(step["kind"])
+                if kind == "rolling_sum":
+                    current_series = current_series.astype(float).rolling(int(step["params"]["window"])).sum()
+                else:
+                    raise ValueError(f"Unsupported derived step kind in fast runner: {kind}")
+            features[column_name] = current_series
+            continue
+
+        raise ValueError(f"Unsupported feature spec for fast runner: {spec}")
+
+    if final_column_name is None:
+        raise ValueError("No feature specs provided")
+    return features[final_column_name].astype(bool)
+
+
 def _build_folds(
     timestamps: pd.DatetimeIndex,
     is_months: int,
@@ -202,22 +370,27 @@ def main() -> None:
     combos = [combo for combo in raw_combinations if _passes_constraints(combo, constraints)]
     folds = _build_folds(price.index, args.is_months, args.oos_months, args.step_months, args.window_mode)
 
-    all_windows = sorted(
-        {int(combo["short"]) for combo in combos}
-        | {int(combo["long"]) for combo in combos}
-        | {int(combo["mid"]) for combo in combos if "mid" in combo}
-    )
+    rendered_feature_specs_by_run_name: dict[str, list[dict[str, Any]]] = {}
+    all_windows: set[int] = set()
+    for combo in combos:
+        rendered_specs = _render_template(config["feature_spec_template"], combo)
+        run_name = config["run_name_template"].format(**combo)
+        rendered_feature_specs_by_run_name[run_name] = rendered_specs
+        all_windows |= _gather_rolling_mean_windows(rendered_specs)
+
+    if not all_windows:
+        raise ValueError("Fast runner could not find any rolling_mean windows in feature_spec_template")
+
+    all_windows = sorted(all_windows)
     ma_map = {window: price.rolling(window).mean() for window in all_windows}
     signal_map: dict[str, pd.Series] = {}
     for combo in combos:
-        short = int(combo["short"])
-        long = int(combo["long"])
         run_name = config["run_name_template"].format(**combo)
-        if "mid" in combo:
-            mid = int(combo["mid"])
-            signal_map[run_name] = (ma_map[short] > ma_map[mid]) & (ma_map[mid] > ma_map[long])
-        else:
-            signal_map[run_name] = ma_map[short] > ma_map[long]
+        signal_map[run_name] = _build_signal_from_feature_specs(
+            rendered_feature_specs_by_run_name[run_name],
+            price,
+            ma_map,
+        )
 
     fold_candidate_rows: list[dict[str, Any]] = []
     fold_winner_rows: list[dict[str, Any]] = []

@@ -489,7 +489,7 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     top_curve_count = int(config.get("top_curve_count", 5))
     ranking_metric = str(config.get("ranking_metric", "Total Return [%]"))
-    compute_rolling_ir_enabled = bool(config.get("compute_rolling_ir", True))
+    compute_rolling_ir_enabled = bool(config.get("compute_rolling_ir", False))
     rolling_ir_windows = tuple(int(value) for value in config.get("rolling_ir_windows", [126, 252]))
     save_summary_plots = bool(config.get("save_summary_plots", False))
     save_rolling_ir_plots = bool(config.get("save_rolling_ir_plots", False))

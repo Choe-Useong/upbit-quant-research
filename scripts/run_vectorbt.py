@@ -16,11 +16,13 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from lib.dataframes import build_wide_frame_from_candle_dir
 from lib.storage import read_candles_csv, read_table_csv
 from lib.vectorbt_adapter import (
     VectorBTSpec,
     build_price_frame,
     build_target_weight_frame,
+    build_target_weight_frame_from_wide_csv,
     run_portfolio_from_target_weights,
 )
 
@@ -35,6 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
         dest="candle_dir",
         default="data/upbit/daily",
         help="Directory containing per-market candle CSV files",
+    )
+    parser.add_argument(
+        "--load-mode",
+        choices=["auto", "candles", "wide"],
+        default="auto",
+        help="auto/wide: dataframe-first loading, candles: legacy CandleRow loading",
     )
     parser.add_argument(
         "--weights-csv",
@@ -80,6 +88,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="HTML filename for the comparison plot inside out-dir",
     )
     parser.add_argument(
+        "--save-rolling-ir-csv",
+        action="store_true",
+        help="Write rolling_information_ratio.csv to out-dir; disabled by default to reduce output size",
+    )
+    parser.add_argument(
         "--benchmark-market",
         default="KRW-BTC",
         help="Market to use for buy-and-hold benchmark",
@@ -103,6 +116,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Optional JSON file containing parameter_* metadata fields to write into summary.csv",
     )
+    parser.add_argument(
+        "--trim-start-mode",
+        choices=["first_weight", "none"],
+        default="first_weight",
+        help="Trim the simulation start to the first timestamp with non-zero target weights; default is first_weight",
+    )
     return parser
 
 
@@ -111,6 +130,37 @@ def load_all_candles(candle_dir: Path) -> list:
     for csv_path in sorted(candle_dir.glob("*.csv")):
         rows.extend(read_candles_csv(csv_path))
     return rows
+
+
+def resolve_load_mode(load_mode: str) -> str:
+    if load_mode == "auto":
+        return "wide"
+    return load_mode
+
+
+def detect_weight_csv_format(weights_csv: Path) -> str:
+    header = pd.read_csv(weights_csv, nrows=0, encoding="utf-8-sig")
+    columns = set(header.columns)
+    if {"date_utc", "market", "target_weight"}.issubset(columns):
+        return "sparse"
+    if "date_utc" in columns:
+        return "wide"
+    raise ValueError(f"Unsupported weights CSV format: {weights_csv}")
+
+
+def trim_frames_to_first_weight(
+    price_frame: pd.DataFrame,
+    target_weight_frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp | None]:
+    active_mask = target_weight_frame.fillna(0.0).abs().sum(axis=1) > 0.0
+    if not bool(active_mask.any()):
+        return price_frame, target_weight_frame, None
+    first_active = pd.Timestamp(active_mask[active_mask].index[0])
+    return (
+        price_frame.loc[price_frame.index >= first_active],
+        target_weight_frame.loc[target_weight_frame.index >= first_active],
+        first_active,
+    )
 
 
 def write_summary_csv(path: Path, summary: pd.Series) -> None:
@@ -605,10 +655,6 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    candle_rows = load_all_candles(Path(args.candle_dir))
-    if not candle_rows:
-        raise SystemExit(f"No candle rows found in {args.candle_dir}")
-
     timeframe = infer_timeframe(Path(args.candle_dir), args.timeframe)
     periods_per_year = args.periods_per_year or infer_periods_per_year(timeframe)
     periods_per_day = periods_per_day_for_timeframe(timeframe)
@@ -621,8 +667,32 @@ def main() -> None:
     if not weight_rows:
         raise SystemExit(f"No weight rows found in {args.weights_csv}")
 
-    price_frame = build_price_frame(candle_rows, price_column=args.price_column)
-    target_weight_frame = build_target_weight_frame(weight_rows, price_frame)
+    resolved_load_mode = resolve_load_mode(args.load_mode)
+    candle_rows = None
+    if resolved_load_mode == "wide":
+        price_frame = build_wide_frame_from_candle_dir(
+            Path(args.candle_dir),
+            value_column=args.price_column,
+        )
+    else:
+        candle_rows = load_all_candles(Path(args.candle_dir))
+        if not candle_rows:
+            raise SystemExit(f"No candle rows found in {args.candle_dir}")
+        price_frame = build_price_frame(candle_rows, price_column=args.price_column)
+    weight_csv_format = detect_weight_csv_format(Path(args.weights_csv))
+    if weight_csv_format == "wide":
+        target_weight_frame = build_target_weight_frame_from_wide_csv(
+            args.weights_csv,
+            price_frame,
+        )
+    else:
+        target_weight_frame = build_target_weight_frame(weight_rows, price_frame)
+    trimmed_start_timestamp = None
+    if args.trim_start_mode == "first_weight":
+        price_frame, target_weight_frame, trimmed_start_timestamp = trim_frames_to_first_weight(
+            price_frame,
+            target_weight_frame,
+        )
     portfolio = run_portfolio_from_target_weights(
         price_frame=price_frame,
         target_weight_frame=target_weight_frame,
@@ -678,6 +748,11 @@ def main() -> None:
         equity_curve,
         annualization_factor=periods_per_year,
     ) * 100.0
+    summary.loc["Load Mode"] = resolved_load_mode
+    summary.loc["Weights CSV Format"] = weight_csv_format
+    summary.loc["Trim Start Mode"] = args.trim_start_mode
+    if trimmed_start_timestamp is not None:
+        summary.loc["Trimmed Start Timestamp"] = trimmed_start_timestamp.isoformat()
     summary.loc["Timeframe"] = timeframe
     summary.loc["Periods Per Year"] = periods_per_year
     if args.strategy_family:
@@ -706,10 +781,12 @@ def main() -> None:
     write_equity_csv(out_dir / "benchmark_curve.csv", aligned_benchmark_curve)
     write_equity_csv(out_dir / "excess_equity_curve.csv", excess_equity_curve)
     write_equity_csv(out_dir / "excess_returns.csv", excess_returns)
-    write_equity_csv(out_dir / "rolling_information_ratio.csv", rolling_ir)
+    if args.save_rolling_ir_csv:
+        write_equity_csv(out_dir / "rolling_information_ratio.csv", rolling_ir)
     target_weight_frame.to_csv(out_dir / "target_weights_full.csv", encoding="utf-8-sig")
     if args.show_plot:
         show_equity_plot(equity_curve, aligned_benchmark_curve, out_dir / args.plot_html)
+    print(f"Resolved load mode: {resolved_load_mode}")
     print(f"Wrote vectorbt results to {out_dir}")
 
 

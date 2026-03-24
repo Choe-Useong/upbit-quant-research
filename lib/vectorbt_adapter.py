@@ -89,6 +89,24 @@ def build_target_weight_frame(
     return target_frame
 
 
+def build_target_weight_frame_from_wide_csv(
+    weights_csv: str | Path,
+    price_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    if price_frame.empty:
+        return pd.DataFrame()
+
+    frame = pd.read_csv(weights_csv, encoding="utf-8-sig")
+    if "date_utc" not in frame.columns:
+        raise ValueError("Wide target weight CSV must contain date_utc column")
+
+    frame["date_utc"] = pd.to_datetime(frame["date_utc"], utc=False)
+    frame = frame.set_index("date_utc").sort_index()
+    frame = frame.apply(pd.to_numeric, errors="coerce")
+    frame = frame.reindex(index=price_frame.index, columns=price_frame.columns)
+    return frame
+
+
 def _scheduled_rebalance_dates(
     index: pd.Index,
     rebalance_frequency: str,

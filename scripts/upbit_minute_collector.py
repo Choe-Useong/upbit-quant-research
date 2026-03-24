@@ -71,6 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Limit the number of markets after filtering",
     )
     parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="Skip markets whose output CSV already exists",
+    )
+    parser.add_argument(
+        "--start-market",
+        default="",
+        help="Start from this market code after filtering/sorting, for example KRW-ADA",
+    )
+    parser.add_argument(
         "--out-dir",
         default="data/upbit",
         help="Base output directory",
@@ -95,22 +105,39 @@ def main() -> None:
     if args.markets:
         allowed = {market.strip().upper() for market in args.markets.split(",") if market.strip()}
         markets = [market for market in markets if market.market in allowed]
+    if args.start_market:
+        start_market = args.start_market.strip().upper()
+        markets = [market for market in markets if market.market >= start_market]
     if args.max_markets is not None:
         markets = markets[: args.max_markets]
 
     write_market_manifest(out_dir / "markets.csv", markets)
     print(f"Found {len(markets)} {args.quote.upper()} markets for {args.unit}-minute candles")
 
+    failures: list[str] = []
     for idx, market in enumerate(markets, start=1):
-        candles = collect_minute_candles(
-            market=market,
-            unit=args.unit,
-            candles=args.candles,
-            batch_size=args.batch_size,
-            pause_seconds=args.pause_seconds,
-        )
-        row_count = write_candles_csv(minute_dir / f"{market.market}.csv", candles)
-        print(f"[{idx}/{len(markets)}] {market.market}: saved {row_count} rows")
+        output_path = minute_dir / f"{market.market}.csv"
+        if args.skip_existing and output_path.exists():
+            print(f"[{idx}/{len(markets)}] {market.market}: skipped existing")
+            continue
+        try:
+            candles = collect_minute_candles(
+                market=market,
+                unit=args.unit,
+                candles=args.candles,
+                batch_size=args.batch_size,
+                pause_seconds=args.pause_seconds,
+            )
+            row_count = write_candles_csv(output_path, candles)
+            print(f"[{idx}/{len(markets)}] {market.market}: saved {row_count} rows")
+        except Exception as exc:
+            failures.append(f"{market.market}: {exc}")
+            print(f"[{idx}/{len(markets)}] {market.market}: failed ({exc})")
+
+    if failures:
+        print(f"Completed with {len(failures)} failed markets")
+        for failure in failures:
+            print(f"  - {failure}")
 
 
 if __name__ == "__main__":
