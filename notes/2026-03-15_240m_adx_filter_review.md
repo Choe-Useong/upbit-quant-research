@@ -83,8 +83,8 @@ Conclusion:
 
 Files:
 
-- [grid_btc_ma_10_200_adx_grid_240m_fee5bp.json](c:/Users/working/Desktop/Coin%20Project/configs/grid_btc_ma_10_200_adx_grid_240m_fee5bp.json)
-- [summary_results.csv](c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_10_200_adx_grid_240m_fee5bp/summary_results.csv)
+- [grid_btc_ma_10_200_adx_grid_240m_fee5bp.json](../configs/grid_btc_ma_10_200_adx_grid_240m_fee5bp.json)
+- [summary_results.csv](../data/grid/btc_ma_10_200_adx_grid_240m_fee5bp/summary_results.csv)
 
 ## ETH: `5/20 every_bar` + ADX Filter
 
@@ -142,8 +142,8 @@ Conclusion:
 
 Files:
 
-- [grid_eth_ma_5_20_adx_grid_240m_fee5bp.json](c:/Users/working/Desktop/Coin%20Project/configs/grid_eth_ma_5_20_adx_grid_240m_fee5bp.json)
-- [summary_results.csv](c:/Users/working/Desktop/Coin%20Project/data/grid/eth_ma_5_20_adx_grid_240m_fee5bp/summary_results.csv)
+- [grid_eth_ma_5_20_adx_grid_240m_fee5bp.json](../configs/grid_eth_ma_5_20_adx_grid_240m_fee5bp.json)
+- [summary_results.csv](../data/grid/eth_ma_5_20_adx_grid_240m_fee5bp/summary_results.csv)
 
 ## Overall Interpretation
 

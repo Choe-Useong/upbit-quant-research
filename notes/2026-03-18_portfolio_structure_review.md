@@ -53,8 +53,8 @@ Problem:
 - so non-change bars were being zeroed out by the weight-frame builder
 
 Fix:
-- added `sparse` rebalance handling in [lib/vectorbt_adapter.py](/c:/Users/working/Desktop/Coin%20Project/lib/vectorbt_adapter.py)
-- updated [scripts/experiments/portfolio/build_change_only_weights.py](/c:/Users/working/Desktop/Coin%20Project/scripts/experiments/portfolio/build_change_only_weights.py) to emit `rebalance_frequency = sparse`
+- added `sparse` rebalance handling in [lib/vectorbt_adapter.py](../lib/vectorbt_adapter.py)
+- updated [scripts/experiments/portfolio/build_change_only_weights.py](../scripts/experiments/portfolio/build_change_only_weights.py) to emit `rebalance_frequency = sparse`
 
 After the fix:
 - `change-only` means exactly what was intended:
@@ -128,7 +128,7 @@ Preferred interpretation:
 - `slippage 5bp`
 
 Result:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_60m_equal_weight_change_only_common_start_true_slip5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_60m_equal_weight_change_only_common_start_true_slip5bp/summary.csv)
 - CAGR `36.96%`
 - MDD `22.99%`
 - Total Trades `9,138`
@@ -171,7 +171,7 @@ Conclusion:
 - `slippage 5bp`
 
 Result:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_240m_equal_weight_change_only_common_start_true_slip5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_240m_equal_weight_change_only_common_start_true_slip5bp/summary.csv)
 - CAGR `36.29%`
 - MDD `22.38%`
 - Total Trades `3,212`
@@ -200,13 +200,13 @@ Preferred version:
 - `slippage 5bp`
 
 Result:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_60m_equal_weight_4core_change_only_common_start_true_slip5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_60m_equal_weight_4core_change_only_common_start_true_slip5bp/summary.csv)
 - CAGR `32.88%`
 - MDD `26.64%`
 - Trades `4,526`
 
 At `2.5bp` slippage:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_60m_equal_weight_4core_change_only_common_start_true_slip2p5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_60m_equal_weight_4core_change_only_common_start_true_slip2p5bp/summary.csv)
 - CAGR `37.64%`
 - MDD `24.68%`
 
@@ -227,13 +227,13 @@ Preferred tested version:
 - `slippage 5bp`
 
 Result:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_60m_equal_weight_2core_change_only_true_slip5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_60m_equal_weight_2core_change_only_true_slip5bp/summary.csv)
 - CAGR `68.98%`
 - MDD `45.61%`
 - Trades `2,709`
 
 At `2.5bp` slippage:
-- file: [summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/backtest/main_strategies_60m_equal_weight_2core_change_only_true_slip2p5bp/summary.csv)
+- file: [summary.csv](../data/backtest/main_strategies_60m_equal_weight_2core_change_only_true_slip2p5bp/summary.csv)
 - CAGR `74.40%`
 - MDD `44.10%`
 

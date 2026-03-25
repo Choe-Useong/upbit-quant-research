@@ -32,9 +32,9 @@ It is materially different from the usual symmetric persistence check.
 
 Reference:
 
-- [full-sample summary](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_10_120_exit_persistence_stateful_60m_fee5bp_summary.csv)
-- [rolling 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_10_120_exit_persistence_18m_6m_3m_rolling_exact/walkforward_summary.csv)
-- [expanding 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_10_120_exit_persistence_18m_6m_3m_expanding_exact/walkforward_summary.csv)
+- [full-sample summary](../data/grid/btc_ma_10_120_exit_persistence_stateful_60m_fee5bp_summary.csv)
+- [rolling 18/6/3](../data/validation/btc_60m_10_120_exit_persistence_18m_6m_3m_rolling_exact/walkforward_summary.csv)
+- [expanding 18/6/3](../data/validation/btc_60m_10_120_exit_persistence_18m_6m_3m_expanding_exact/walkforward_summary.csv)
 
 Full-sample AIR:
 
@@ -66,7 +66,7 @@ Decision:
 
 Reference:
 
-- [full-sample summary](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_10_120_entry_persistence_stateful_60m_fee5bp_summary.csv)
+- [full-sample summary](../data/grid/btc_ma_10_120_entry_persistence_stateful_60m_fee5bp_summary.csv)
 
 Result:
 
@@ -84,9 +84,9 @@ Meaning:
 
 Reference:
 
-- [rolling 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/eth_60m_persist_check_18m_6m_3m_rolling/walkforward_summary.csv)
-- [rolling candidates](/c:/Users/working/Desktop/Coin%20Project/data/validation/eth_60m_persist_check_18m_6m_3m_rolling/candidate_summary.csv)
-- [expanding 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/eth_60m_persist_check_18m_6m_3m_expanding/walkforward_summary.csv)
+- [rolling 18/6/3](../data/validation/eth_60m_persist_check_18m_6m_3m_rolling/walkforward_summary.csv)
+- [rolling candidates](../data/validation/eth_60m_persist_check_18m_6m_3m_rolling/candidate_summary.csv)
+- [expanding 18/6/3](../data/validation/eth_60m_persist_check_18m_6m_3m_expanding/walkforward_summary.csv)
 
 Fixed-candidate OOS median AIR:
 
@@ -113,7 +113,7 @@ Decision:
 
 Reference:
 
-- [full-sample summary](/c:/Users/working/Desktop/Coin%20Project/data/grid/eth_ma_5_60_exit_persistence_stateful_60m_fee5bp_summary.csv)
+- [full-sample summary](../data/grid/eth_ma_5_60_exit_persistence_stateful_60m_fee5bp_summary.csv)
 
 Result:
 
@@ -132,8 +132,8 @@ Meaning:
 
 Reference:
 
-- [rolling 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_persist_check_18m_6m_3m_rolling_exact/walkforward_summary.csv)
-- [expanding 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_persist_check_18m_6m_3m_expanding_exact/walkforward_summary.csv)
+- [rolling 18/6/3](../data/validation/xrp_60m_persist_check_18m_6m_3m_rolling_exact/walkforward_summary.csv)
+- [expanding 18/6/3](../data/validation/xrp_60m_persist_check_18m_6m_3m_expanding_exact/walkforward_summary.csv)
 
 Result:
 
@@ -149,10 +149,10 @@ Meaning:
 
 Reference:
 
-- [full-sample summary](/c:/Users/working/Desktop/Coin%20Project/data/grid/xrp_ma_10_20_200_exit_persistence_stateful_60m_fee5bp_summary.csv)
-- [rolling 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_exit_persist_check_18m_6m_3m_rolling_exact/walkforward_summary.csv)
-- [rolling candidates](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_exit_persist_check_18m_6m_3m_rolling_exact/candidate_summary.csv)
-- [expanding 18/6/3](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_exit_persist_check_18m_6m_3m_expanding_exact/walkforward_summary.csv)
+- [full-sample summary](../data/grid/xrp_ma_10_20_200_exit_persistence_stateful_60m_fee5bp_summary.csv)
+- [rolling 18/6/3](../data/validation/xrp_60m_exit_persist_check_18m_6m_3m_rolling_exact/walkforward_summary.csv)
+- [rolling candidates](../data/validation/xrp_60m_exit_persist_check_18m_6m_3m_rolling_exact/candidate_summary.csv)
+- [expanding 18/6/3](../data/validation/xrp_60m_exit_persist_check_18m_6m_3m_expanding_exact/walkforward_summary.csv)
 
 Full-sample AIR:
 

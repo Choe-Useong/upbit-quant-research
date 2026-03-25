@@ -10,8 +10,8 @@ The work in this round had two goals:
 
 All KRW markets were collected into:
 
-- [markets.csv](/c:/Users/working/Desktop/Coin%20Project/data/upbit_research/markets.csv)
-- [data/upbit_research/minutes/60](/c:/Users/working/Desktop/Coin%20Project/data/upbit_research/minutes/60)
+- [markets.csv](../data/upbit_research/markets.csv)
+- [data/upbit_research/minutes/60](../data/upbit_research/minutes/60)
 
 Status:
 
@@ -20,9 +20,9 @@ Status:
 
 Important implementation fixes:
 
-- [upbit_collector.py](/c:/Users/working/Desktop/Coin%20Project/lib/upbit_collector.py)
+- [upbit_collector.py](../lib/upbit_collector.py)
   - added retry logic for `RemoteDisconnected`, timeout, and transient HTTP errors
-- [upbit_minute_collector.py](/c:/Users/working/Desktop/Coin%20Project/scripts/upbit_minute_collector.py)
+- [upbit_minute_collector.py](../scripts/upbit_minute_collector.py)
   - added `--skip-existing`
   - added `--start-market`
   - one failed market no longer kills the whole overnight run
@@ -31,7 +31,7 @@ Important implementation fixes:
 
 Cross-sectional research now runs through:
 
-- [research_turnover_cross_section.py](/c:/Users/working/Desktop/Coin%20Project/scripts/research_turnover_cross_section.py)
+- [research_turnover_cross_section.py](../scripts/research_turnover_cross_section.py)
 
 Current capabilities:
 
@@ -63,7 +63,7 @@ The script was validated on synthetic data.
 
 Reference:
 
-- [data/_tmp_turnover_test2/out_matrix](/c:/Users/working/Desktop/Coin%20Project/data/_tmp_turnover_test2/out_matrix)
+- temporary scratch output from the original matrix validation run (local `_tmp` artifact, now removed)
 
 What was verified:
 
@@ -78,7 +78,7 @@ So the current outputs are structurally trustworthy.
 
 The basic full-universe turnover-only result was:
 
-- [bucket_summary.csv](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_full/bucket_summary.csv)
+- [bucket_summary.csv](../data/research/turnover_cross_section_60m_full/bucket_summary.csv)
 
 Key pattern:
 
@@ -94,8 +94,8 @@ Meaning:
 
 The more useful view is the 2D matrix:
 
-- [matrix_mean_forward_return_pct.csv](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix/matrix_mean_forward_return_pct.csv)
-- [matrix_observations.csv](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix/matrix_observations.csv)
+- [matrix_mean_forward_return_pct.csv](../data/research/turnover_cross_section_60m_matrix/matrix_mean_forward_return_pct.csv)
+- [matrix_observations.csv](../data/research/turnover_cross_section_60m_matrix/matrix_observations.csv)
 
 At this stage:
 
@@ -116,8 +116,8 @@ Two different readings were checked.
 
 Examples:
 
-- [fwd48 raw](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48/matrix_mean_forward_return_pct.csv)
-- [mom72 raw](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_mom72_raw/matrix_mean_forward_return_pct.csv)
+- [fwd48 raw](../data/research/turnover_cross_section_60m_matrix_fwd48/matrix_mean_forward_return_pct.csv)
+- [mom72 raw](../data/research/turnover_cross_section_60m_matrix_fwd48_mom72_raw/matrix_mean_forward_return_pct.csv)
 
 In the raw matrix:
 
@@ -134,7 +134,7 @@ This means the raw data still looks more like:
 
 Example:
 
-- [fwd48 posmom](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_posmom/matrix_mean_forward_return_pct.csv)
+- [fwd48 posmom](../data/research/turnover_cross_section_60m_matrix_fwd48_posmom/matrix_mean_forward_return_pct.csv)
 
 With `momentum > 0` enforced:
 
@@ -157,10 +157,10 @@ Compared under:
 
 References:
 
-- [mom6](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom6/bucket_summary.csv)
-- [mom24](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom24/bucket_summary.csv)
-- [mom48](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom48/bucket_summary.csv)
-- [mom72](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom72/bucket_summary.csv)
+- [mom6](../data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom6/bucket_summary.csv)
+- [mom24](../data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom24/bucket_summary.csv)
+- [mom48](../data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom48/bucket_summary.csv)
+- [mom72](../data/research/turnover_cross_section_60m_matrix_fwd48_posmom_mom72/bucket_summary.csv)
 
 Observed ranking:
 
@@ -182,9 +182,9 @@ Compared under:
 
 References:
 
-- [turnover 6h](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn6_mom48_fwd48_raw/bucket_summary.csv)
-- [turnover 24h](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn24_mom48_fwd48_raw/bucket_summary.csv)
-- [turnover 72h](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn72_mom48_fwd48_raw/bucket_summary.csv)
+- [turnover 6h](../data/research/turnover_cross_section_60m_turn6_mom48_fwd48_raw/bucket_summary.csv)
+- [turnover 24h](../data/research/turnover_cross_section_60m_turn24_mom48_fwd48_raw/bucket_summary.csv)
+- [turnover 72h](../data/research/turnover_cross_section_60m_turn72_mom48_fwd48_raw/bucket_summary.csv)
 
 Observed ranking:
 
@@ -207,9 +207,9 @@ Compared under:
 
 References:
 
-- [lookback 14d](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn24_lb14d_mom48_fwd48_raw/bucket_summary.csv)
-- [lookback 30d](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn24_lb30d_mom48_fwd48_raw/bucket_summary.csv)
-- [lookback 60d](/c:/Users/working/Desktop/Coin%20Project/data/research/turnover_cross_section_60m_turn24_lb60d_mom48_fwd48_raw/bucket_summary.csv)
+- [lookback 14d](../data/research/turnover_cross_section_60m_turn24_lb14d_mom48_fwd48_raw/bucket_summary.csv)
+- [lookback 30d](../data/research/turnover_cross_section_60m_turn24_lb30d_mom48_fwd48_raw/bucket_summary.csv)
+- [lookback 60d](../data/research/turnover_cross_section_60m_turn24_lb60d_mom48_fwd48_raw/bucket_summary.csv)
 
 Observed ranking:
 

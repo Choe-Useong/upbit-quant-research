@@ -22,8 +22,8 @@ The new `fast_exact` path is closer to a true walk-forward for simple single-ass
 
 Reference files:
 
-- [run_fast_ma_cross_walkforward.py](/c:/Users/working/Desktop/Coin%20Project/scripts/walkforward/run_fast_ma_cross_walkforward.py)
-- [validate_fast_exact_mix_against_vectorbt.py](/c:/Users/working/Desktop/Coin%20Project/scripts/walkforward/validate_fast_exact_mix_against_vectorbt.py)
+- [run_fast_ma_cross_walkforward.py](../scripts/walkforward/run_fast_ma_cross_walkforward.py)
+- [validate_fast_exact_mix_against_vectorbt.py](../scripts/walkforward/validate_fast_exact_mix_against_vectorbt.py)
 
 ## 2. BTC
 
@@ -31,9 +31,9 @@ Reference files:
 
 Reference:
 
-- [rolling summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
-- [expanding fold candidates](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
+- [rolling summary](../data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [expanding fold candidates](../data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
 
 Key result:
 
@@ -61,7 +61,7 @@ Meaning:
 
 Reference:
 
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/btc_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
 
 Result:
 
@@ -76,8 +76,8 @@ Interpretation:
 
 Reference:
 
-- [rolling top2 mix summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_top2mix_fast_exact/walkforward_summary.csv)
-- [expanding top2 mix summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_top2mix_fast_exact/walkforward_summary.csv)
+- [rolling top2 mix summary](../data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_top2mix_fast_exact/walkforward_summary.csv)
+- [expanding top2 mix summary](../data/validation/btc_60m_true_walkforward_2line_18m_6m_3m_expanding_top2mix_fast_exact/walkforward_summary.csv)
 
 Result:
 
@@ -93,8 +93,8 @@ Interpretation:
 
 Reference:
 
-- [rolling summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/eth_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/eth_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [rolling summary](../data/validation/eth_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/eth_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
 
 Result:
 
@@ -113,8 +113,8 @@ Interpretation:
 
 Reference:
 
-- [rolling summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [rolling summary](../data/validation/xrp_60m_true_walkforward_2line_18m_6m_3m_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/xrp_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
 
 Result:
 
@@ -125,9 +125,9 @@ Result:
 
 Reference:
 
-- [rolling summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_fast_exact/walkforward_summary.csv)
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
-- [expanding fold candidates](/c:/Users/working/Desktop/Coin%20Project/data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
+- [rolling summary](../data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [expanding fold candidates](../data/validation/xrp_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
 
 Result:
 
@@ -151,7 +151,7 @@ Interpretation:
 
 Reference:
 
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/ada_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/ada_60m_true_walkforward_2line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
 
 Result:
 
@@ -162,10 +162,10 @@ Result:
 
 Reference:
 
-- [rolling summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_fast_exact/walkforward_summary.csv)
-- [expanding summary](/c:/Users/working/Desktop/Coin%20Project/data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
-- [expanding fold candidates](/c:/Users/working/Desktop/Coin%20Project/data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
-- [expanding fold winners](/c:/Users/working/Desktop/Coin%20Project/data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_winners.csv)
+- [rolling summary](../data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_fast_exact/walkforward_summary.csv)
+- [expanding summary](../data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/walkforward_summary.csv)
+- [expanding fold candidates](../data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_candidates.csv)
+- [expanding fold winners](../data/validation/ada_60m_true_walkforward_3line_18m_6m_3m_expanding_fast_exact/fold_winners.csv)
 
 Result:
 
@@ -224,8 +224,8 @@ The first attempt was deliberately low-degree-of-freedom.
 
 Reference:
 
-- [config](/c:/Users/working/Desktop/Coin%20Project/configs/grid_btc_sma_slope_longcash_60m_fee5bp.json)
-- [results](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_sma_slope_longcash_60m_fee5bp/summary_results.csv)
+- [config](../configs/grid_btc_sma_slope_longcash_60m_fee5bp.json)
+- [results](../data/grid/btc_sma_slope_longcash_60m_fee5bp/summary_results.csv)
 
 Important naming note:
 
@@ -249,8 +249,8 @@ Interpretation:
 
 Reference:
 
-- [low-vol results](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_vol_cross_longcash_60m_fee5bp/summary_results.csv)
-- [high-vol results](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_vol_cross_highvol_longcash_60m_fee5bp/summary_results.csv)
+- [low-vol results](../data/grid/btc_vol_cross_longcash_60m_fee5bp/summary_results.csv)
+- [high-vol results](../data/grid/btc_vol_cross_highvol_longcash_60m_fee5bp/summary_results.csv)
 
 Result:
 
@@ -265,12 +265,12 @@ Interpretation:
 
 Reference:
 
-- [low-vol filter on 10/120](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_10_120_with_lowvol_filter_60m_fee5bp/summary_results.csv)
-- [high-vol filter on 10/120](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_10_120_with_highvol_filter_60m_fee5bp/summary_results.csv)
+- [low-vol filter on 10/120](../data/grid/btc_ma_10_120_with_lowvol_filter_60m_fee5bp/summary_results.csv)
+- [high-vol filter on 10/120](../data/grid/btc_ma_10_120_with_highvol_filter_60m_fee5bp/summary_results.csv)
 
 Baseline:
 
-- [BTC 10/120 baseline](/c:/Users/working/Desktop/Coin%20Project/data/grid/btc_ma_cross_60m_fee5bp/summary_results.csv)
+- [BTC 10/120 baseline](../data/grid/btc_ma_cross_60m_fee5bp/summary_results.csv)
 - CAGR `68.16%`
 - MDD `36.71%`
 - AIR `0.4200`

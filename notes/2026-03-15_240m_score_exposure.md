@@ -189,10 +189,10 @@ Score per asset:
 
 Files:
 
-- [features_btc_eth_custom_score_240m.csv](c:/Users/working/Desktop/Coin%20Project/data/upbit/features/features_btc_eth_custom_score_240m.csv)
-- [universe_btc_eth_custom_score_240m.csv](c:/Users/working/Desktop/Coin%20Project/data/upbit/universe/universe_btc_eth_custom_score_240m.csv)
-- [weights_btc_eth_custom_score_240m.csv](c:/Users/working/Desktop/Coin%20Project/data/upbit/weights/weights_btc_eth_custom_score_240m.csv)
-- [summary.csv](c:/Users/working/Desktop/Coin%20Project/data/backtest/btc_eth_custom_score_240m_fee5bp/summary.csv)
+- [features_btc_eth_custom_score_240m.csv](../data/upbit/features/features_btc_eth_custom_score_240m.csv)
+- [universe_btc_eth_custom_score_240m.csv](../data/upbit/universe/universe_btc_eth_custom_score_240m.csv)
+- [weights_btc_eth_custom_score_240m.csv](../data/upbit/weights/weights_btc_eth_custom_score_240m.csv)
+- [summary.csv](../data/backtest/btc_eth_custom_score_240m_fee5bp/summary.csv)
 
 Review:
 

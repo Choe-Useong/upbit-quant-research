@@ -37,6 +37,7 @@ The repository is optimized for research iteration and simple weights-first live
 - `lib/vectorbt_adapter.py`: vectorbt bridge
 - `lib/allocation.py`: portfolio weight allocation / sleeve merge
 - `lib/dataframes.py`: wide-frame utilities and factor calculations
+- `notes/`: human-written research notes and reviews
 - `scripts/build_features.py`: build feature CSV
 - `scripts/build_universe.py`: build universe CSV
 - `scripts/build_weights.py`: build weights CSV
@@ -201,6 +202,7 @@ py scripts/run_grid.py --config-json configs/grid_xrp_ma_cross_fee5bp.json --ope
 
 - `data/` is ignored from Git by default.
 - `live/logs/` is ignored from Git by default.
+- `notes/` contains human-readable research notes, while `data/research/` contains generated research outputs.
 - `configs/` is the main reproducibility layer.
 - Benchmark-relative metrics use the configured `benchmark_market`.
 - Grid runner supports simple constraints such as `short < long` and `short < mid < long`.
