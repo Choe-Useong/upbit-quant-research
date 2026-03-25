@@ -19,10 +19,13 @@ from lib.dataframes import (
     build_wide_frames_from_candle_dir,
     compute_market_beta_frame,
     compute_market_forward_return_frame,
+    compute_market_median_momentum_frame,
     compute_market_momentum_frame,
     compute_market_residual_momentum_frame,
     compute_market_rolling_sum_frame,
+    compute_market_trend_quality_frame,
     compute_market_turnover_weighted_momentum_frame,
+    compute_market_win_rate_frame,
 )
 
 
@@ -95,23 +98,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--single-factors",
         default="",
-        help="Comma-separated factors to summarize independently, for example turnover,momentum. Empty means auto-select available factors.",
+        help="Comma-separated factors to summarize independently, for example raw_turnover,z_turnover,momentum,median_momentum,win_rate,trend_quality. Empty means auto-select available factors.",
     )
     parser.add_argument(
         "--bucket-factor",
-        choices=["turnover", "momentum"],
         default="turnover",
         help="Deprecated alias for single-factor summary selection",
     )
     parser.add_argument(
         "--matrix-row-factor",
-        choices=["turnover", "momentum"],
         default=None,
         help="Factor used for 2D matrix rows; omitted means do not produce a 2D matrix",
     )
     parser.add_argument(
         "--matrix-col-factor",
-        choices=["turnover", "momentum"],
         default=None,
         help="Factor used for 2D matrix columns; omitted means do not produce a 2D matrix",
     )
@@ -182,6 +182,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional minimum cross-sectional momentum percentile in [0, 1], for example 0.8 for top 20 percent",
     )
+    parser.add_argument(
+        "--momentum-rank-change-hours",
+        type=int,
+        default=24,
+        help="Lookback used for momentum cross-percentile change factor",
+    )
+    parser.add_argument(
+        "--turnover-rank-change-hours",
+        type=int,
+        default=24,
+        help="Lookback used for turnover cross-percentile change factor",
+    )
+    parser.add_argument(
+        "--win-rate-hours",
+        type=int,
+        default=None,
+        help="Optional lookback used for win-rate factor in 60m bars",
+    )
+    parser.add_argument(
+        "--win-rate-threshold",
+        type=float,
+        default=0.0,
+        help="Return threshold used for win-rate factor, for example 0.0 for positive bars",
+    )
+    parser.add_argument(
+        "--trend-quality-hours",
+        type=int,
+        default=None,
+        help="Optional lookback used for slope*R^2 trend-quality factor in 60m bars",
+    )
     return parser
 
 
@@ -222,6 +252,31 @@ def _parse_factor_list(raw: str) -> list[str]:
     return unique_values
 
 
+def _normalize_factor_alias(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized == "turnover":
+        return "turnover"
+    return normalized
+
+
+def _normalize_factor_list(values: list[str]) -> list[str]:
+    normalized_values: list[str] = []
+    for value in values:
+        normalized = _normalize_factor_alias(value)
+        if normalized not in normalized_values:
+            normalized_values.append(normalized)
+    return normalized_values
+
+
+def _compute_rank_change_frame(
+    cross_pct_frame: pd.DataFrame,
+    periods: int,
+) -> pd.DataFrame:
+    if periods <= 0:
+        raise ValueError("periods must be positive for rank change")
+    return cross_pct_frame - cross_pct_frame.shift(periods)
+
+
 def _summarize_buckets(
     forward_frame: pd.DataFrame,
     cross_pct_frame: pd.DataFrame,
@@ -260,40 +315,50 @@ def _summarize_buckets(
 
 
 def _build_latest_snapshot(
-    score_frame: pd.DataFrame,
-    cross_pct_frame: pd.DataFrame,
-    turnover_frame: pd.DataFrame,
-    momentum_frame: pd.DataFrame | None = None,
-    momentum_cross_pct_frame: pd.DataFrame | None = None,
-    sort_factor: str = "turnover",
+    factor_value_frames: dict[str, pd.DataFrame],
+    factor_cross_pct_frames: dict[str, pd.DataFrame],
+    sort_factor: str,
 ) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    for market in score_frame.columns:
-        score_series = score_frame[market].dropna()
-        if score_series.empty:
+    if not factor_value_frames:
+        return pd.DataFrame()
+
+    anchor_factor = next(iter(factor_value_frames.keys()))
+    anchor_frame = factor_value_frames[anchor_factor]
+    for market in anchor_frame.columns:
+        anchor_series = anchor_frame[market].dropna()
+        if anchor_series.empty:
             continue
-        latest_timestamp = score_series.index[-1]
+        latest_timestamp = anchor_series.index[-1]
         next_row = {
             "market": market,
             "date_utc": latest_timestamp.isoformat(),
-            "turnover_24h": float(turnover_frame.at[latest_timestamp, market]),
-            "ts_score": float(score_frame.at[latest_timestamp, market]),
-            "turnover_cross_percentile_pct": float(cross_pct_frame.at[latest_timestamp, market] * 100.0),
         }
-        if momentum_frame is not None and market in momentum_frame.columns:
-            next_row["momentum"] = float(momentum_frame.at[latest_timestamp, market])
-        if momentum_cross_pct_frame is not None and market in momentum_cross_pct_frame.columns:
-            next_row["momentum_cross_percentile_pct"] = float(
-                momentum_cross_pct_frame.at[latest_timestamp, market] * 100.0
-            )
+        for factor_name, factor_frame in factor_value_frames.items():
+            if market in factor_frame.columns and latest_timestamp in factor_frame.index:
+                value = factor_frame.at[latest_timestamp, market]
+                next_row[factor_name] = float(value) if pd.notna(value) else math.nan
+        for factor_name, factor_cross_pct_frame in factor_cross_pct_frames.items():
+            if market in factor_cross_pct_frame.columns and latest_timestamp in factor_cross_pct_frame.index:
+                value = factor_cross_pct_frame.at[latest_timestamp, market]
+                next_row[f"{factor_name}_cross_percentile_pct"] = float(value * 100.0) if pd.notna(value) else math.nan
         rows.append(next_row)
     latest_frame = pd.DataFrame(rows)
     if latest_frame.empty:
         return latest_frame
-    sort_column = "turnover_cross_percentile_pct"
-    if sort_factor == "momentum" and "momentum_cross_percentile_pct" in latest_frame.columns:
-        sort_column = "momentum_cross_percentile_pct"
-    return latest_frame.sort_values([sort_column, "turnover_24h"], ascending=[False, False]).reset_index(drop=True)
+    sort_column = f"{sort_factor}_cross_percentile_pct"
+    if sort_column not in latest_frame.columns:
+        sort_column = next(
+            (f"{factor_name}_cross_percentile_pct" for factor_name in factor_cross_pct_frames if f"{factor_name}_cross_percentile_pct" in latest_frame.columns),
+            sort_column,
+        )
+    secondary_column = next(
+        (factor_name for factor_name in factor_value_frames if factor_name in latest_frame.columns),
+        sort_column,
+    )
+    ascending_flags = [False, False] if secondary_column in latest_frame.columns else [False]
+    sort_columns = [sort_column, secondary_column] if secondary_column in latest_frame.columns else [sort_column]
+    return latest_frame.sort_values(sort_columns, ascending=ascending_flags).reset_index(drop=True)
 
 
 def _summarize_bucket_matrix(
@@ -454,6 +519,9 @@ def main() -> None:
     )
     forward_frame = compute_market_forward_return_frame(price_frame, args.forward_hours)
     momentum_frame = None
+    median_momentum_frame = None
+    win_rate_frame = None
+    trend_quality_frame = None
     if args.momentum_hours is not None:
         if args.momentum_mode == "price":
             momentum_frame = compute_market_momentum_frame(price_frame, args.momentum_hours)
@@ -470,14 +538,24 @@ def main() -> None:
                 args.momentum_hours,
                 args.beta_lookback_hours,
             )
+        median_momentum_frame = compute_market_median_momentum_frame(price_frame, args.momentum_hours)
+    if args.win_rate_hours is not None:
+        win_rate_frame = compute_market_win_rate_frame(
+            price_frame,
+            args.win_rate_hours,
+            threshold=args.win_rate_threshold,
+        )
+    if args.trend_quality_hours is not None:
+        trend_quality_frame = compute_market_trend_quality_frame(
+            price_frame,
+            args.trend_quality_hours,
+        )
     momentum_cross_pct_frame = (
         momentum_frame.rank(axis=1, pct=True, method="average")
         if momentum_frame is not None
         else None
     )
-
     turnover_factor_frame = score_frame if args.turnover_factor_mode == "ts_score" else turnover_frame
-    cross_pct_frame = turnover_factor_frame.rank(axis=1, pct=True, method="average")
     eligibility_frame: pd.DataFrame | None = None
     if args.require_positive_momentum:
         if momentum_frame is None:
@@ -491,10 +569,44 @@ def main() -> None:
         cross_mask = momentum_cross_pct_frame >= args.min_momentum_cross_percentile
         eligibility_frame = cross_mask if eligibility_frame is None else (eligibility_frame & cross_mask)
 
-    factor_cross_pct_frames: dict[str, pd.DataFrame] = {"turnover": cross_pct_frame}
-    factor_bucket_frames: dict[str, pd.DataFrame] = {}
+    factor_value_frames: dict[str, pd.DataFrame] = {
+        "raw_turnover": turnover_frame,
+        "z_turnover": score_frame,
+        "turnover": turnover_factor_frame,
+    }
+    if momentum_frame is not None:
+        factor_value_frames["momentum"] = momentum_frame
+    if median_momentum_frame is not None:
+        factor_value_frames["median_momentum"] = median_momentum_frame
+    if win_rate_frame is not None:
+        factor_value_frames["win_rate"] = win_rate_frame
+    if trend_quality_frame is not None:
+        factor_value_frames["trend_quality"] = trend_quality_frame
+
+    factor_cross_pct_frames: dict[str, pd.DataFrame] = {
+        factor_name: factor_frame.rank(axis=1, pct=True, method="average")
+        for factor_name, factor_frame in factor_value_frames.items()
+    }
+    factor_value_frames["turnover_rank_change"] = _compute_rank_change_frame(
+        factor_cross_pct_frames["turnover"],
+        args.turnover_rank_change_hours,
+    )
+    factor_cross_pct_frames["turnover_rank_change"] = factor_value_frames["turnover_rank_change"].rank(
+        axis=1,
+        pct=True,
+        method="average",
+    )
     if momentum_cross_pct_frame is not None:
-        factor_cross_pct_frames["momentum"] = momentum_cross_pct_frame
+        factor_value_frames["momentum_rank_change"] = _compute_rank_change_frame(
+            momentum_cross_pct_frame,
+            args.momentum_rank_change_hours,
+        )
+        factor_cross_pct_frames["momentum_rank_change"] = factor_value_frames["momentum_rank_change"].rank(
+            axis=1,
+            pct=True,
+            method="average",
+        )
+    factor_bucket_frames: dict[str, pd.DataFrame] = {}
 
     for factor_name, factor_cross_pct_frame in factor_cross_pct_frames.items():
         factor_bucket_frames[factor_name] = _bucketize_cross_section(
@@ -502,10 +614,10 @@ def main() -> None:
             bucket_count=args.cross_buckets,
         )
 
-    requested_single_factors = _parse_factor_list(args.single_factors)
+    requested_single_factors = _normalize_factor_list(_parse_factor_list(args.single_factors))
     if not requested_single_factors:
         requested_single_factors = list(factor_cross_pct_frames.keys())
-    requested_quantile_factors = _parse_factor_list(args.quantile_factors)
+    requested_quantile_factors = _normalize_factor_list(_parse_factor_list(args.quantile_factors))
     if requested_quantile_factors:
         invalid_quantile_factors = [factor for factor in requested_quantile_factors if factor not in factor_cross_pct_frames]
         if invalid_quantile_factors:
@@ -515,10 +627,12 @@ def main() -> None:
         raise SystemExit(f"Unsupported single-factor summaries requested: {', '.join(invalid_single_factors)}")
     if (args.matrix_row_factor is None) != (args.matrix_col_factor is None):
         raise SystemExit("--matrix-row-factor and --matrix-col-factor must be provided together")
-    if args.matrix_row_factor == "momentum" and momentum_cross_pct_frame is None:
-        raise SystemExit("--matrix-row-factor momentum requires --momentum-hours")
-    if args.matrix_col_factor == "momentum" and momentum_cross_pct_frame is None:
-        raise SystemExit("--matrix-col-factor momentum requires --momentum-hours")
+    matrix_row_factor = _normalize_factor_alias(args.matrix_row_factor) if args.matrix_row_factor else None
+    matrix_col_factor = _normalize_factor_alias(args.matrix_col_factor) if args.matrix_col_factor else None
+    if matrix_row_factor is not None and matrix_row_factor not in factor_cross_pct_frames:
+        raise SystemExit(f"Unsupported matrix row factor requested: {matrix_row_factor}")
+    if matrix_col_factor is not None and matrix_col_factor not in factor_cross_pct_frames:
+        raise SystemExit(f"Unsupported matrix col factor requested: {matrix_col_factor}")
     bucket_summaries: dict[str, pd.DataFrame] = {}
     for factor_name in requested_single_factors:
         bucket_summaries[factor_name] = _summarize_buckets(
@@ -574,20 +688,17 @@ def main() -> None:
     elif args.matrix_row_factor is not None and args.matrix_col_factor is not None:
         matrix_outputs = _summarize_bucket_matrix(
             forward_frame=forward_frame,
-            row_bucket_frame=factor_bucket_frames[args.matrix_row_factor],
-            col_bucket_frame=factor_bucket_frames[args.matrix_col_factor],
+            row_bucket_frame=factor_bucket_frames[matrix_row_factor],
+            col_bucket_frame=factor_bucket_frames[matrix_col_factor],
             min_cross_section_size=args.min_cross_section_size,
             bucket_count=args.cross_buckets,
-            row_factor_name=args.matrix_row_factor,
-            col_factor_name=args.matrix_col_factor,
+            row_factor_name=matrix_row_factor,
+            col_factor_name=matrix_col_factor,
             eligibility_frame=eligibility_frame,
         )
     latest_snapshot = _build_latest_snapshot(
-        score_frame=score_frame,
-        cross_pct_frame=cross_pct_frame,
-        turnover_frame=turnover_frame,
-        momentum_frame=momentum_frame,
-        momentum_cross_pct_frame=momentum_cross_pct_frame,
+        factor_value_frames=factor_value_frames,
+        factor_cross_pct_frames=factor_cross_pct_frames,
         sort_factor=(requested_quantile_factors[0] if requested_quantile_factors else requested_single_factors[0]),
     )
 

@@ -24,6 +24,7 @@ Thumbs.db
 
 # Local data and generated outputs
 data/
+live/logs/
 
 # Optional local notebooks
 *.ipynb_checkpoints

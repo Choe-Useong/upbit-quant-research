@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -150,6 +151,60 @@ def compute_market_momentum_frame(
         price_frame,
         lambda series: (series / series.shift(periods)) - 1.0,
     )
+
+
+def compute_market_median_momentum_frame(
+    price_frame: pd.DataFrame,
+    periods: int,
+) -> pd.DataFrame:
+    return apply_by_market_column(
+        price_frame,
+        lambda series: series.pct_change(fill_method=None).rolling(periods, min_periods=periods).median(),
+    )
+
+
+def compute_market_win_rate_frame(
+    price_frame: pd.DataFrame,
+    periods: int,
+    threshold: float = 0.0,
+) -> pd.DataFrame:
+    return apply_by_market_column(
+        price_frame,
+        lambda series: (
+            series.pct_change(fill_method=None) > threshold
+        ).astype(float).rolling(periods, min_periods=periods).mean(),
+    )
+
+
+def compute_market_trend_quality_frame(
+    price_frame: pd.DataFrame,
+    periods: int,
+) -> pd.DataFrame:
+    n = float(periods)
+    weights = np.arange(periods, dtype=float)
+    sum_x = float(weights.sum())
+    sum_x2 = float((weights**2).sum())
+    denom_x = (n * sum_x2) - (sum_x**2)
+
+    def _trend_quality(series: pd.Series) -> pd.Series:
+        log_price = np.log(series.where(series > 0.0).astype(float))
+        sum_y = log_price.rolling(periods, min_periods=periods).sum()
+        sum_y2 = log_price.pow(2).rolling(periods, min_periods=periods).sum()
+
+        sum_xy = pd.Series(np.nan, index=log_price.index, dtype=float)
+        y_values = log_price.to_numpy(dtype=float, copy=False)
+        if len(y_values) >= periods:
+            weighted_sum = np.correlate(y_values, weights, mode="valid")
+            sum_xy.iloc[periods - 1 :] = weighted_sum
+
+        numer = (n * sum_xy) - (sum_x * sum_y)
+        denom_y = (n * sum_y2) - sum_y.pow(2)
+        slope = numer / denom_x
+        r_squared = (numer.pow(2)) / (denom_x * denom_y)
+        r_squared = r_squared.where(denom_y > 0.0).clip(lower=0.0)
+        return slope * r_squared
+
+    return apply_by_market_column(price_frame, _trend_quality)
 
 
 def compute_market_beta_frame(
