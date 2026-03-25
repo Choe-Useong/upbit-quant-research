@@ -1,0 +1,6 @@
+{
+  "weighting": "equal",
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "daily",
+  "universe_name": "upbit_turn24_q1_60m_siglag1_mincs100"
+}

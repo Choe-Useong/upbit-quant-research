@@ -1,0 +1,23 @@
+[
+  {
+    "source": "candle_acc_trade_price",
+    "steps": [
+      {
+        "kind": "rolling_sum",
+        "params": {
+          "window": 24
+        }
+      }
+    ],
+    "column_name": "turnover_24h"
+  },
+  {
+    "source": "trade_price",
+    "steps": [
+      {
+        "kind": "age_days"
+      }
+    ],
+    "column_name": "age_days"
+  }
+]

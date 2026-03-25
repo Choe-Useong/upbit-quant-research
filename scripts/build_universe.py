@@ -36,6 +36,7 @@ def load_universe_spec(path: Path) -> UniverseSpec:
         feature_column=payload["feature_column"],
         sort_column=payload.get("sort_column"),
         lag=payload.get("lag", 1),
+        signal_lag=payload.get("signal_lag", 0),
         mode=payload.get("mode", "top_n"),
         top_n=payload.get("top_n", 30),
         quantiles=payload.get("quantiles", 5),
@@ -43,6 +44,7 @@ def load_universe_spec(path: Path) -> UniverseSpec:
         ascending=payload.get("ascending", False),
         exclude_warnings=payload.get("exclude_warnings", False),
         min_age_days=payload.get("min_age_days"),
+        min_cross_section_size=payload.get("min_cross_section_size", 0),
         allowed_markets=tuple(payload.get("allowed_markets", [])),
         excluded_markets=tuple(payload.get("excluded_markets", [])),
         value_filters=tuple(

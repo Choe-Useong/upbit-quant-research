@@ -18,6 +18,7 @@ from lib.dataframes import (
     apply_by_market_column,
     build_wide_frames_from_candle_dir,
     compute_market_beta_frame,
+    compute_market_consistency_ratio_frame,
     compute_market_forward_return_frame,
     compute_market_median_momentum_frame,
     compute_market_momentum_frame,
@@ -98,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--single-factors",
         default="",
-        help="Comma-separated factors to summarize independently, for example raw_turnover,z_turnover,momentum,median_momentum,win_rate,trend_quality. Empty means auto-select available factors.",
+        help="Comma-separated factors to summarize independently, for example raw_turnover,z_turnover,momentum,median_momentum,win_rate,trend_quality,consistency_ratio. Empty means auto-select available factors.",
     )
     parser.add_argument(
         "--bucket-factor",
@@ -212,6 +213,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional lookback used for slope*R^2 trend-quality factor in 60m bars",
     )
+    parser.add_argument(
+        "--min-listing-hours",
+        type=int,
+        default=0,
+        help="Minimum hours since first valid candle required for a market to be eligible at a timestamp",
+    )
+    parser.add_argument(
+        "--consistency-ratio-hours",
+        type=int,
+        default=None,
+        help="Optional lookback used for rolling median/abs(mean) return consistency factor in 60m bars",
+    )
     return parser
 
 
@@ -275,6 +288,26 @@ def _compute_rank_change_frame(
     if periods <= 0:
         raise ValueError("periods must be positive for rank change")
     return cross_pct_frame - cross_pct_frame.shift(periods)
+
+
+def _build_listing_age_eligibility_frame(
+    price_frame: pd.DataFrame,
+    min_listing_hours: int,
+) -> pd.DataFrame:
+    if min_listing_hours <= 0:
+        return pd.DataFrame(True, index=price_frame.index, columns=price_frame.columns)
+
+    eligibility: dict[str, pd.Series] = {}
+    min_age = pd.Timedelta(hours=min_listing_hours)
+    for market in price_frame.columns:
+        series = price_frame[market].dropna()
+        if series.empty:
+            eligibility[market] = pd.Series(False, index=price_frame.index, dtype=bool)
+            continue
+        first_valid = series.index[0]
+        eligible_index = price_frame.index >= (first_valid + min_age)
+        eligibility[market] = pd.Series(eligible_index, index=price_frame.index, dtype=bool)
+    return pd.DataFrame(eligibility, index=price_frame.index).sort_index(axis=1)
 
 
 def _summarize_buckets(
@@ -522,6 +555,7 @@ def main() -> None:
     median_momentum_frame = None
     win_rate_frame = None
     trend_quality_frame = None
+    consistency_ratio_frame = None
     if args.momentum_hours is not None:
         if args.momentum_mode == "price":
             momentum_frame = compute_market_momentum_frame(price_frame, args.momentum_hours)
@@ -550,6 +584,11 @@ def main() -> None:
             price_frame,
             args.trend_quality_hours,
         )
+    if args.consistency_ratio_hours is not None:
+        consistency_ratio_frame = compute_market_consistency_ratio_frame(
+            price_frame,
+            args.consistency_ratio_hours,
+        )
     momentum_cross_pct_frame = (
         momentum_frame.rank(axis=1, pct=True, method="average")
         if momentum_frame is not None
@@ -568,6 +607,9 @@ def main() -> None:
             raise SystemExit("--min-momentum-cross-percentile must be in [0, 1]")
         cross_mask = momentum_cross_pct_frame >= args.min_momentum_cross_percentile
         eligibility_frame = cross_mask if eligibility_frame is None else (eligibility_frame & cross_mask)
+    if args.min_listing_hours > 0:
+        listing_age_mask = _build_listing_age_eligibility_frame(price_frame, args.min_listing_hours)
+        eligibility_frame = listing_age_mask if eligibility_frame is None else (eligibility_frame & listing_age_mask)
 
     factor_value_frames: dict[str, pd.DataFrame] = {
         "raw_turnover": turnover_frame,
@@ -582,6 +624,8 @@ def main() -> None:
         factor_value_frames["win_rate"] = win_rate_frame
     if trend_quality_frame is not None:
         factor_value_frames["trend_quality"] = trend_quality_frame
+    if consistency_ratio_frame is not None:
+        factor_value_frames["consistency_ratio"] = consistency_ratio_frame
 
     factor_cross_pct_frames: dict[str, pd.DataFrame] = {
         factor_name: factor_frame.rank(axis=1, pct=True, method="average")

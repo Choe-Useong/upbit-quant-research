@@ -34,6 +34,7 @@ class UniverseSpec:
     feature_column: str
     sort_column: str | None = None
     lag: int = 1
+    signal_lag: int = 0
     mode: str = "top_n"
     top_n: int = 30
     quantiles: int = 5
@@ -41,6 +42,7 @@ class UniverseSpec:
     ascending: bool = False
     exclude_warnings: bool = False
     min_age_days: int | None = None
+    min_cross_section_size: int = 0
     allowed_markets: tuple[str, ...] = ()
     excluded_markets: tuple[str, ...] = ()
     value_filters: tuple[ValueFilterSpec, ...] = ()
@@ -49,14 +51,19 @@ class UniverseSpec:
 
     def resolved_name(self) -> str:
         sort_column = self.sort_column or self.feature_column
+        lag_part = f"lag{self.lag}"
+        if self.signal_lag > 0:
+            lag_part += f"_siglag{self.signal_lag}"
+        if self.min_cross_section_size > 0:
+            lag_part += f"_mincs{self.min_cross_section_size}"
         if self.name:
             return self.name
         if self.mode == "top_n":
             order = "asc" if self.ascending else "desc"
-            return f"{sort_column}_lag{self.lag}_{order}_top{self.top_n}"
+            return f"{sort_column}_{lag_part}_{order}_top{self.top_n}"
         order = "asc" if self.ascending else "desc"
         buckets = "-".join(str(value) for value in self.bucket_values)
-        return f"{sort_column}_lag{self.lag}_{order}_q{self.quantiles}_b{buckets}"
+        return f"{sort_column}_{lag_part}_{order}_q{self.quantiles}_b{buckets}"
 
 
 def _parse_float(value: str) -> float | None:
@@ -175,6 +182,9 @@ def _selected_rows_for_date(
             continue
         candidates.append(idx)
 
+    if spec.min_cross_section_size > 0 and len(candidates) < spec.min_cross_section_size:
+        return []
+
     for rank_filter in spec.rank_filters:
         rank_values = lagged_value_map[(rank_filter.feature_column, rank_filter.lag)]
         scoped = [(idx, rank_values[idx]) for idx in candidates if rank_values[idx] is not None]
@@ -241,6 +251,10 @@ def build_universe_table(
 ) -> list[dict[str, str]]:
     if spec.mode not in UNIVERSE_MODES:
         raise ValueError(f"Unsupported universe mode: {spec.mode}")
+    if spec.signal_lag < 0:
+        raise ValueError("signal_lag must be >= 0")
+    if spec.min_cross_section_size < 0:
+        raise ValueError("min_cross_section_size must be >= 0")
     for filter_spec in spec.value_filters:
         if filter_spec.operator not in FILTER_OPERATORS:
             raise ValueError(f"Unsupported filter operator: {filter_spec.operator}")
@@ -251,10 +265,52 @@ def build_universe_table(
     rows = sorted(feature_rows, key=lambda row: (row["date_utc"], row["market"]))
     if not rows:
         return []
+    effective_sort_lag = spec.lag + spec.signal_lag
+    effective_value_filters = tuple(
+        ValueFilterSpec(
+            feature_column=filter_spec.feature_column,
+            operator=filter_spec.operator,
+            value=filter_spec.value,
+            lag=filter_spec.lag + spec.signal_lag,
+        )
+        for filter_spec in spec.value_filters
+    )
+    effective_rank_filters = tuple(
+        RankFilterSpec(
+            feature_column=rank_filter.feature_column,
+            mode=rank_filter.mode,
+            lag=rank_filter.lag + spec.signal_lag,
+            top_n=rank_filter.top_n,
+            quantiles=rank_filter.quantiles,
+            bucket_values=rank_filter.bucket_values,
+            ascending=rank_filter.ascending,
+        )
+        for rank_filter in spec.rank_filters
+    )
+    effective_spec = UniverseSpec(
+        feature_column=spec.feature_column,
+        sort_column=spec.sort_column,
+        lag=effective_sort_lag,
+        signal_lag=spec.signal_lag,
+        mode=spec.mode,
+        top_n=spec.top_n,
+        quantiles=spec.quantiles,
+        bucket_values=spec.bucket_values,
+        ascending=spec.ascending,
+        exclude_warnings=spec.exclude_warnings,
+        min_age_days=spec.min_age_days,
+        min_cross_section_size=spec.min_cross_section_size,
+        allowed_markets=spec.allowed_markets,
+        excluded_markets=spec.excluded_markets,
+        value_filters=effective_value_filters,
+        rank_filters=effective_rank_filters,
+        name=spec.name,
+    )
+
     required_pairs = {
-        (spec.sort_column or spec.feature_column, spec.lag),
-        *[(filter_spec.feature_column, filter_spec.lag) for filter_spec in spec.value_filters],
-        *[(rank_filter.feature_column, rank_filter.lag) for rank_filter in spec.rank_filters],
+        (effective_spec.sort_column or effective_spec.feature_column, effective_spec.lag),
+        *[(filter_spec.feature_column, filter_spec.lag) for filter_spec in effective_spec.value_filters],
+        *[(rank_filter.feature_column, rank_filter.lag) for rank_filter in effective_spec.rank_filters],
     }
     for feature_column, _ in required_pairs:
         if feature_column not in rows[0]:
@@ -266,7 +322,7 @@ def build_universe_table(
     }
     selected_rows: list[dict[str, str]] = []
     for indexes in _date_groups(rows):
-        selected_rows.extend(_selected_rows_for_date(rows, lagged_value_map, indexes, spec))
+        selected_rows.extend(_selected_rows_for_date(rows, lagged_value_map, indexes, effective_spec))
     return selected_rows
 
 

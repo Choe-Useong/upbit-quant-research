@@ -1,0 +1,33 @@
+{
+  "name": "upbit_turn24_q1_60m_siglag1_mincs100",
+  "feature_column": "turnover_24h",
+  "lag": 0,
+  "signal_lag": 1,
+  "mode": "top_n",
+  "top_n": 999,
+  "ascending": false,
+  "exclude_warnings": true,
+  "min_age_days": 180,
+  "min_cross_section_size": 100,
+  "excluded_markets": [
+    "KRW-BTC",
+    "KRW-ETH",
+    "KRW-XRP",
+    "KRW-ADA",
+    "KRW-DOGE",
+    "KRW-SOL",
+    "KRW-AVAX"
+  ],
+  "rank_filters": [
+    {
+      "feature_column": "turnover_24h",
+      "mode": "quantile",
+      "lag": 0,
+      "quantiles": 5,
+      "bucket_values": [
+        1
+      ],
+      "ascending": true
+    }
+  ]
+}

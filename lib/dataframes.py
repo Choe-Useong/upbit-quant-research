@@ -207,6 +207,21 @@ def compute_market_trend_quality_frame(
     return apply_by_market_column(price_frame, _trend_quality)
 
 
+def compute_market_consistency_ratio_frame(
+    price_frame: pd.DataFrame,
+    periods: int,
+    epsilon: float = 1e-12,
+) -> pd.DataFrame:
+    def _consistency_ratio(series: pd.Series) -> pd.Series:
+        returns = series.pct_change(fill_method=None)
+        rolling_mean = returns.rolling(periods, min_periods=periods).mean()
+        rolling_median = returns.rolling(periods, min_periods=periods).median()
+        denom = rolling_mean.abs().where(lambda value: value > epsilon)
+        return rolling_median / denom
+
+    return apply_by_market_column(price_frame, _consistency_ratio)
+
+
 def compute_market_beta_frame(
     price_frame: pd.DataFrame,
     benchmark_price: pd.Series,

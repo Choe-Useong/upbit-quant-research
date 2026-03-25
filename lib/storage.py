@@ -71,7 +71,11 @@ def read_candles_csv(path: Path) -> list[CandleRow]:
                 trade_price=float(row["trade_price"]),
                 candle_acc_trade_volume=float(row["candle_acc_trade_volume"]),
                 candle_acc_trade_price=float(row["candle_acc_trade_price"]),
-                timestamp=None if row["timestamp"] == "" else int(row["timestamp"]),
+                timestamp=(
+                    None
+                    if row["timestamp"] == ""
+                    else int(float(row["timestamp"]))
+                ),
             )
             for row in reader
         ]
