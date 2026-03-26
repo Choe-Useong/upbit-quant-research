@@ -1,0 +1,6 @@
+{
+  "weighting": "equal",
+  "gross_exposure": 1.0,
+  "rebalance_frequency": "every_bar",
+  "universe_name": "upbit_ma10_gt_ma120_siglag1_startcs50_age180"
+}

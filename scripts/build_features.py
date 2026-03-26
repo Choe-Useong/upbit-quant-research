@@ -10,10 +10,15 @@ import tempfile
 from pathlib import Path
 from typing import Iterator
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import pandas as pd
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from lib.dataframes import read_wide_frames_from_cache
 from lib.features import (
     CompareSpec,
     FeatureSpec,
@@ -24,7 +29,8 @@ from lib.features import (
     build_feature_table,
     feature_columns,
 )
-from lib.storage import read_candles_csv, write_table_csv
+from lib.storage import read_candles_csv, write_table
+from lib.upbit_collector import CandleRow
 
 MARKET_STREAM_UNSUPPORTED_TRANSFORMS = {"cross_rank", "cross_percentile"}
 
@@ -41,7 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory containing per-market candle CSV files",
     )
     parser.add_argument("--spec-json", required=True, help="JSON file containing feature spec list")
-    parser.add_argument("--output-csv", default="data/upbit/features/features.csv", help="Output feature CSV path")
+    parser.add_argument(
+        "--output-csv",
+        "--output-path",
+        dest="output_csv",
+        default="data/upbit/features/features.csv",
+        help="Output feature table path (.csv or .parquet)",
+    )
     parser.add_argument(
         "--engine",
         choices=["auto", "legacy", "market_stream"],
@@ -59,6 +71,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Optional per-market tail length to keep, assuming one row per hour.",
+    )
+    parser.add_argument(
+        "--source-cache-dir",
+        default="",
+        help="Optional wide-parquet source cache directory, e.g. data/upbit_research_cache/60",
     )
     return parser
 
@@ -134,6 +151,84 @@ def load_market_candles(csv_path: Path, tail_hours: int | None = None) -> list:
     return rows
 
 
+def load_market_candles_from_cache(
+    cache_dir: Path,
+    market: str,
+    *,
+    tail_hours: int | None = None,
+    cache_frames: dict[str, pd.DataFrame] | None = None,
+    market_meta: pd.DataFrame | None = None,
+    market_warning: pd.DataFrame | None = None,
+) -> list[CandleRow]:
+    required_columns = (
+        "opening_price",
+        "high_price",
+        "low_price",
+        "trade_price",
+        "candle_acc_trade_volume",
+        "candle_acc_trade_price",
+        "timestamp",
+    )
+    if cache_frames is None:
+        cache_frames = read_wide_frames_from_cache(
+            cache_dir,
+            required_columns,
+            tail_rows=tail_hours,
+        )
+    if market_meta is None:
+        market_meta = pd.read_parquet(cache_dir / "market_meta.parquet")
+    if market_warning is None:
+        warning_path = cache_dir / "market_warning.parquet"
+        market_warning = pd.read_parquet(warning_path) if warning_path.exists() else pd.DataFrame()
+
+    meta_rows = market_meta.loc[market_meta["market"] == market]
+    if meta_rows.empty:
+        return []
+    meta_row = meta_rows.iloc[0]
+
+    base_frame = cache_frames["trade_price"]
+    if market not in base_frame.columns:
+        return []
+    market_index = base_frame[market].dropna().index
+    if tail_hours is not None and len(market_index) > tail_hours:
+        market_index = market_index[-tail_hours:]
+
+    rows: list[CandleRow] = []
+    for timestamp in market_index:
+        trade_price = cache_frames["trade_price"].at[timestamp, market]
+        if pd.isna(trade_price):
+            continue
+        warning_value = "NONE"
+        if not market_warning.empty and market in market_warning.columns and timestamp in market_warning.index:
+            warning_cell = market_warning.at[timestamp, market]
+            if not pd.isna(warning_cell) and str(warning_cell):
+                warning_value = str(warning_cell).upper()
+        date_utc = pd.Timestamp(timestamp).strftime("%Y-%m-%dT%H:%M:%S")
+        date_kst = (pd.Timestamp(timestamp) + pd.Timedelta(hours=9)).strftime("%Y-%m-%dT%H:%M:%S")
+        rows.append(
+            CandleRow(
+                market=market,
+                korean_name=str(meta_row["korean_name"]),
+                english_name=str(meta_row["english_name"]),
+                market_warning=warning_value,
+                date_utc=date_utc,
+                date_kst=date_kst,
+                opening_price=float(cache_frames["opening_price"].at[timestamp, market]),
+                high_price=float(cache_frames["high_price"].at[timestamp, market]),
+                low_price=float(cache_frames["low_price"].at[timestamp, market]),
+                trade_price=float(trade_price),
+                candle_acc_trade_volume=float(cache_frames["candle_acc_trade_volume"].at[timestamp, market]),
+                candle_acc_trade_price=float(cache_frames["candle_acc_trade_price"].at[timestamp, market]),
+                timestamp=(
+                    None
+                    if pd.isna(cache_frames["timestamp"].at[timestamp, market])
+                    else int(float(cache_frames["timestamp"].at[timestamp, market]))
+                ),
+            )
+        )
+    return rows
+
+
 def load_all_candles(
     candle_dir: Path,
     max_markets: int | None = None,
@@ -182,9 +277,7 @@ def _iter_temp_rows(path: Path) -> Iterator[dict[str, str]]:
             yield row
 
 
-def _merge_market_feature_csvs(temp_paths: list[Path], output_csv: Path, columns: list[str]) -> int:
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    row_count = 0
+def _iter_merged_market_feature_rows(temp_paths: list[Path]) -> Iterator[dict[str, str]]:
     iterators: list[Iterator[dict[str, str]]] = []
     heap: list[tuple[tuple[str, str], int, dict[str, str]]] = []
 
@@ -195,16 +288,49 @@ def _merge_market_feature_csvs(temp_paths: list[Path], output_csv: Path, columns
         if first_row is not None:
             heapq.heappush(heap, (_row_sort_key(first_row), len(iterators) - 1, first_row))
 
-    with output_csv.open("w", newline="", encoding="utf-8-sig") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns)
-        writer.writeheader()
-        while heap:
-            _, iterator_idx, row = heapq.heappop(heap)
-            writer.writerow(row)
+    while heap:
+        _, iterator_idx, row = heapq.heappop(heap)
+        yield row
+        next_row = next(iterators[iterator_idx], None)
+        if next_row is not None:
+            heapq.heappush(heap, (_row_sort_key(next_row), iterator_idx, next_row))
+
+
+def _merge_market_feature_tables(temp_paths: list[Path], output_path: Path, columns: list[str]) -> int:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    row_count = 0
+    row_iter = _iter_merged_market_feature_rows(temp_paths)
+    if output_path.suffix.lower() != ".parquet":
+        with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
+            writer = csv.DictWriter(handle, fieldnames=columns)
+            writer.writeheader()
+            for row in row_iter:
+                writer.writerow(row)
+                row_count += 1
+        return row_count
+
+    writer: pq.ParquetWriter | None = None
+    buffers = {column: [] for column in columns}
+    batch_size = 50000
+    try:
+        for row in row_iter:
+            for column in columns:
+                buffers[column].append(row.get(column, ""))
             row_count += 1
-            next_row = next(iterators[iterator_idx], None)
-            if next_row is not None:
-                heapq.heappush(heap, (_row_sort_key(next_row), iterator_idx, next_row))
+            if len(buffers[columns[0]]) >= batch_size:
+                table = pa.table(buffers)
+                if writer is None:
+                    writer = pq.ParquetWriter(output_path, table.schema, compression="zstd")
+                writer.write_table(table)
+                buffers = {column: [] for column in columns}
+        if buffers[columns[0]]:
+            table = pa.table(buffers)
+            if writer is None:
+                writer = pq.ParquetWriter(output_path, table.schema, compression="zstd")
+            writer.write_table(table)
+    finally:
+        if writer is not None:
+            writer.close()
 
     return row_count
 
@@ -212,28 +338,60 @@ def _merge_market_feature_csvs(temp_paths: list[Path], output_csv: Path, columns
 def build_feature_table_market_stream(
     candle_dir: Path,
     feature_specs: list[FeatureSpec],
-    output_csv: Path,
+    output_path: Path,
     max_markets: int | None = None,
     tail_hours: int | None = None,
+    source_cache_dir: Path | None = None,
 ) -> int:
     columns = feature_columns(feature_specs)
     temp_paths: list[Path] = []
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="build_features_", dir=output_csv.parent) as temp_dir_name:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="build_features_", dir=output_path.parent) as temp_dir_name:
         temp_dir = Path(temp_dir_name)
-        for csv_path in list_candle_paths(candle_dir, max_markets=max_markets):
-            candle_rows = load_market_candles(csv_path, tail_hours=tail_hours)
+        cache_frames = None
+        market_meta = None
+        market_warning = None
+        candle_paths = list_candle_paths(candle_dir, max_markets=max_markets)
+        if source_cache_dir is not None:
+            cache_frames = read_wide_frames_from_cache(
+                source_cache_dir,
+                (
+                    "opening_price",
+                    "high_price",
+                    "low_price",
+                    "trade_price",
+                    "candle_acc_trade_volume",
+                    "candle_acc_trade_price",
+                    "timestamp",
+                ),
+                max_markets=max_markets,
+            )
+            market_meta = pd.read_parquet(source_cache_dir / "market_meta.parquet")
+            warning_path = source_cache_dir / "market_warning.parquet"
+            market_warning = pd.read_parquet(warning_path) if warning_path.exists() else pd.DataFrame()
+        for csv_path in candle_paths:
+            if source_cache_dir is not None:
+                candle_rows = load_market_candles_from_cache(
+                    source_cache_dir,
+                    csv_path.stem.upper(),
+                    tail_hours=tail_hours,
+                    cache_frames=cache_frames,
+                    market_meta=market_meta,
+                    market_warning=market_warning,
+                )
+            else:
+                candle_rows = load_market_candles(csv_path, tail_hours=tail_hours)
             if not candle_rows:
                 continue
             feature_rows = build_feature_table(candle_rows, feature_specs)
             if not feature_rows:
                 continue
             temp_path = temp_dir / csv_path.name
-            write_table_csv(temp_path, feature_rows, columns)
+            write_table(temp_path, feature_rows, columns)
             temp_paths.append(temp_path)
         if not temp_paths:
             raise SystemExit(f"No candle rows found in {candle_dir}")
-        return _merge_market_feature_csvs(temp_paths, output_csv, columns)
+        return _merge_market_feature_tables(temp_paths, output_path, columns)
 
 
 def main() -> None:
@@ -243,6 +401,7 @@ def main() -> None:
     feature_specs = load_feature_specs(Path(args.spec_json))
     candle_dir = Path(args.candle_dir)
     output_csv = Path(args.output_csv)
+    source_cache_dir = Path(args.source_cache_dir) if args.source_cache_dir else None
 
     selected_engine = args.engine
     if selected_engine == "auto":
@@ -257,6 +416,7 @@ def main() -> None:
             output_csv,
             max_markets=args.max_markets,
             tail_hours=args.tail_hours,
+            source_cache_dir=source_cache_dir,
         )
     else:
         candle_rows = load_all_candles(
@@ -267,7 +427,7 @@ def main() -> None:
         if not candle_rows:
             raise SystemExit(f"No candle rows found in {args.candle_dir}")
         feature_rows = build_feature_table(candle_rows, feature_specs)
-        write_table_csv(output_csv, feature_rows, feature_columns(feature_specs))
+        write_table(output_csv, feature_rows, feature_columns(feature_specs))
         row_count = len(feature_rows)
 
     print(f"Wrote {row_count} feature rows to {args.output_csv}")

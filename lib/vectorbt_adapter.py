@@ -97,7 +97,11 @@ def build_target_weight_frame_from_wide_csv(
     if price_frame.empty:
         return pd.DataFrame()
 
-    frame = pd.read_csv(weights_csv, encoding="utf-8-sig")
+    weights_path = Path(weights_csv)
+    if weights_path.suffix.lower() == ".parquet":
+        frame = pd.read_parquet(weights_path)
+    else:
+        frame = pd.read_csv(weights_path, encoding="utf-8-sig")
     if "date_utc" not in frame.columns:
         raise ValueError("Wide target weight CSV must contain date_utc column")
 

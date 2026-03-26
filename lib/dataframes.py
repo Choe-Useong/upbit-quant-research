@@ -105,6 +105,42 @@ def build_wide_frame_from_candle_dir(
     return frames[value_column]
 
 
+def read_wide_frame_from_cache(
+    cache_dir: Path,
+    value_column: str,
+    *,
+    max_markets: int | None = None,
+    tail_rows: int | None = None,
+) -> pd.DataFrame:
+    path = cache_dir / f"{value_column}.parquet"
+    frame = pd.read_parquet(path)
+    frame.index = pd.to_datetime(frame.index, utc=False)
+    frame = frame.sort_index().sort_index(axis=1)
+    if max_markets is not None:
+        frame = frame.reindex(columns=sorted(frame.columns)[:max_markets])
+    if tail_rows is not None and len(frame) > tail_rows:
+        frame = frame.iloc[-tail_rows:].copy()
+    return frame
+
+
+def read_wide_frames_from_cache(
+    cache_dir: Path,
+    value_columns: Sequence[str],
+    *,
+    max_markets: int | None = None,
+    tail_rows: int | None = None,
+) -> dict[str, pd.DataFrame]:
+    return {
+        value_column: read_wide_frame_from_cache(
+            cache_dir,
+            value_column,
+            max_markets=max_markets,
+            tail_rows=tail_rows,
+        )
+        for value_column in value_columns
+    }
+
+
 def build_long_frame_from_candle_dir(
     candle_dir: Path,
     usecols: Sequence[str] | None = None,

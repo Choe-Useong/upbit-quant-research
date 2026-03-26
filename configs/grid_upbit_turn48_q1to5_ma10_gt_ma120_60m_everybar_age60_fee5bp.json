@@ -1,0 +1,125 @@
+{
+  "candle_dir": "data/upbit_research/minutes/60",
+  "out_dir": "data/grid/upbit_turn48_q1to5_ma10_gt_ma120_60m_everybar_age60_fee5bp",
+  "run_name_template": "upbit_turn48_q{bucket_label}_ma10gt120_everybar_startcs50_age60_fee5bp",
+  "shared_feature_spec_template": [
+    {
+      "source": "candle_acc_trade_price",
+      "steps": [
+        {
+          "kind": "rolling_sum",
+          "params": {
+            "window": 48
+          }
+        }
+      ],
+      "column_name": "turnover_48h"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 10
+          }
+        }
+      ],
+      "column_name": "sma_10"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 120
+          }
+        }
+      ],
+      "column_name": "sma_120"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_10",
+        "operator": "gt",
+        "right_feature": "sma_120"
+      },
+      "column_name": "sma10_gt_sma120"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "turnover_48h",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "top_n",
+    "top_n": 999,
+    "ascending": false,
+    "exclude_warnings": true,
+    "min_age_days": 60,
+    "excluded_markets": [
+      "KRW-BTC",
+      "KRW-ETH",
+      "KRW-XRP",
+      "KRW-ADA",
+      "KRW-DOGE",
+      "KRW-SOL",
+      "KRW-AVAX"
+    ],
+    "value_filters": [
+      {
+        "feature_column": "sma10_gt_sma120",
+        "operator": "eq",
+        "value": 1.0
+      }
+    ],
+    "rank_filters": [
+      {
+        "feature_column": "turnover_48h",
+        "mode": "quantile",
+        "lag": 0,
+        "quantiles": 5,
+        "bucket_values": "{bucket_values}",
+        "ascending": true
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "every_bar",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "bucket_label": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5"
+    ],
+    "bucket_values": [
+      [1],
+      [2],
+      [3],
+      [4],
+      [5]
+    ]
+  }
+}

@@ -16,8 +16,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from lib.dataframes import build_wide_frame_from_candle_dir
-from lib.storage import read_candles_csv, read_table_csv
+from lib.dataframes import build_wide_frame_from_candle_dir, read_wide_frame_from_cache
+from lib.storage import read_candles_csv, read_table
 from lib.vectorbt_adapter import (
     VectorBTSpec,
     build_price_frame,
@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory containing per-market candle CSV files",
     )
     parser.add_argument(
+        "--source-cache-dir",
+        default="",
+        help="Optional wide-parquet source cache directory, e.g. data/upbit_research_cache/60",
+    )
+    parser.add_argument(
         "--load-mode",
         choices=["auto", "candles", "wide"],
         default="auto",
@@ -46,8 +51,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--weights-csv",
+        "--weights-path",
         required=True,
-        help="CSV file containing sparse target weights by date and market",
+        help="Weights table path (.csv or .parquet), sparse or wide format",
     )
     parser.add_argument(
         "--price-column",
@@ -132,6 +138,24 @@ def load_all_candles(candle_dir: Path) -> list:
     return rows
 
 
+def load_price_frame(
+    candle_dir: Path,
+    price_column: str,
+    *,
+    load_mode: str,
+    source_cache_dir: Path | None = None,
+) -> pd.DataFrame:
+    if load_mode == "wide":
+        if source_cache_dir is not None:
+            cache_path = source_cache_dir / f"{price_column}.parquet"
+            if cache_path.exists():
+                return read_wide_frame_from_cache(source_cache_dir, price_column)
+        return build_wide_frame_from_candle_dir(candle_dir, price_column)
+
+    candle_rows = load_all_candles(candle_dir)
+    return build_price_frame(candle_rows, price_column)
+
+
 def resolve_load_mode(load_mode: str) -> str:
     if load_mode == "auto":
         return "wide"
@@ -139,8 +163,11 @@ def resolve_load_mode(load_mode: str) -> str:
 
 
 def detect_weight_csv_format(weights_csv: Path) -> str:
-    header = pd.read_csv(weights_csv, nrows=0, encoding="utf-8-sig")
-    columns = set(header.columns)
+    if weights_csv.suffix.lower() == ".parquet":
+        columns = set(pd.read_parquet(weights_csv).columns)
+    else:
+        header = pd.read_csv(weights_csv, nrows=0, encoding="utf-8-sig")
+        columns = set(header.columns)
     if {"date_utc", "market", "target_weight"}.issubset(columns):
         return "sparse"
     if "date_utc" in columns:
@@ -655,6 +682,8 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    candle_dir = Path(args.candle_dir)
+    source_cache_dir = Path(args.source_cache_dir) if args.source_cache_dir else None
     timeframe = infer_timeframe(Path(args.candle_dir), args.timeframe)
     periods_per_year = args.periods_per_year or infer_periods_per_year(timeframe)
     periods_per_day = periods_per_day_for_timeframe(timeframe)
@@ -663,22 +692,20 @@ def main() -> None:
     if args.parameter_metadata_json:
         parameter_metadata = json.loads(Path(args.parameter_metadata_json).read_text(encoding="utf-8-sig"))
 
-    weight_rows = read_table_csv(Path(args.weights_csv))
-    if not weight_rows:
-        raise SystemExit(f"No weight rows found in {args.weights_csv}")
-
     resolved_load_mode = resolve_load_mode(args.load_mode)
     candle_rows = None
-    if resolved_load_mode == "wide":
-        price_frame = build_wide_frame_from_candle_dir(
-            Path(args.candle_dir),
-            value_column=args.price_column,
-        )
-    else:
-        candle_rows = load_all_candles(Path(args.candle_dir))
+    price_frame = load_price_frame(
+        candle_dir,
+        args.price_column,
+        load_mode=resolved_load_mode,
+        source_cache_dir=source_cache_dir,
+    )
+    if resolved_load_mode != "wide":
+        candle_rows = load_all_candles(candle_dir)
         if not candle_rows:
             raise SystemExit(f"No candle rows found in {args.candle_dir}")
-        price_frame = build_price_frame(candle_rows, price_column=args.price_column)
+    elif price_frame.empty:
+        raise SystemExit(f"No price rows found in {args.candle_dir}")
     weight_csv_format = detect_weight_csv_format(Path(args.weights_csv))
     if weight_csv_format == "wide":
         target_weight_frame = build_target_weight_frame_from_wide_csv(
@@ -686,6 +713,9 @@ def main() -> None:
             price_frame,
         )
     else:
+        weight_rows = read_table(Path(args.weights_csv))
+        if not weight_rows:
+            raise SystemExit(f"No weight rows found in {args.weights_csv}")
         target_weight_frame = build_target_weight_frame(weight_rows, price_frame)
     trimmed_start_timestamp = None
     if args.trim_start_mode == "first_weight":

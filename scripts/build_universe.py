@@ -10,13 +10,14 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from lib.storage import read_table_csv, write_table_csv
+from lib.storage import read_table, write_table
 from lib.universe import (
     RankFilterSpec,
     UniverseSpec,
     ValueFilterSpec,
     build_universe_table,
     universe_columns,
+    write_universe_table_from_feature_csv,
 )
 
 
@@ -27,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--features-csv", required=True, help="Input feature CSV path")
     parser.add_argument("--spec-json", required=True, help="JSON file containing one universe spec")
     parser.add_argument("--output-csv", default="data/upbit/universe/universe.csv", help="Output universe CSV path")
+    parser.add_argument(
+        "--engine",
+        choices=["auto", "legacy", "stream"],
+        default="auto",
+        help="Universe build engine. auto uses stream.",
+    )
     return parser
 
 
@@ -37,6 +44,7 @@ def load_universe_spec(path: Path) -> UniverseSpec:
         sort_column=payload.get("sort_column"),
         lag=payload.get("lag", 1),
         signal_lag=payload.get("signal_lag", 0),
+        start_min_cross_section_size=payload.get("start_min_cross_section_size", 0),
         mode=payload.get("mode", "top_n"),
         top_n=payload.get("top_n", 30),
         quantiles=payload.get("quantiles", 5),
@@ -44,7 +52,6 @@ def load_universe_spec(path: Path) -> UniverseSpec:
         ascending=payload.get("ascending", False),
         exclude_warnings=payload.get("exclude_warnings", False),
         min_age_days=payload.get("min_age_days"),
-        min_cross_section_size=payload.get("min_cross_section_size", 0),
         allowed_markets=tuple(payload.get("allowed_markets", [])),
         excluded_markets=tuple(payload.get("excluded_markets", [])),
         value_filters=tuple(
@@ -76,14 +83,22 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    feature_rows = read_table_csv(Path(args.features_csv))
-    if not feature_rows:
-        raise SystemExit(f"No feature rows found in {args.features_csv}")
-
     universe_spec = load_universe_spec(Path(args.spec_json))
-    universe_rows = build_universe_table(feature_rows, universe_spec)
-    write_table_csv(Path(args.output_csv), universe_rows, universe_columns())
-    print(f"Wrote {len(universe_rows)} universe rows to {args.output_csv}")
+    engine = "stream" if args.engine == "auto" else args.engine
+    if engine == "legacy":
+        feature_rows = read_table(Path(args.features_csv))
+        if not feature_rows:
+            raise SystemExit(f"No feature rows found in {args.features_csv}")
+        universe_rows = build_universe_table(feature_rows, universe_spec)
+        write_table(Path(args.output_csv), universe_rows, universe_columns())
+        row_count = len(universe_rows)
+    else:
+        row_count = write_universe_table_from_feature_csv(
+            args.features_csv,
+            args.output_csv,
+            universe_spec,
+        )
+    print(f"Wrote {row_count} universe rows to {args.output_csv}")
 
 
 if __name__ == "__main__":
