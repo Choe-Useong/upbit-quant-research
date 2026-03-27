@@ -14,12 +14,12 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pandas as pd
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from lib.dataframes import read_wide_frames_from_cache
-from lib.features import build_feature_table, feature_columns
+from lib.legacy.features import build_feature_table, feature_columns
 from lib.spec_io import load_feature_specs
 from lib.specs import FeatureSpec
 from lib.storage import read_candles_csv, write_table

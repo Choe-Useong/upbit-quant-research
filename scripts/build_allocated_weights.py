@@ -16,7 +16,7 @@ from lib.allocation import (
     load_allocation_config,
 )
 from lib.storage import write_table_csv
-from lib.weights import weight_columns
+from lib.legacy.weights import weight_columns
 
 
 def build_parser() -> argparse.ArgumentParser:

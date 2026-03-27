@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from lib.specs import WeightSpec
@@ -27,17 +28,22 @@ def build_weight_frame_v2(
     if spec.weighting != "equal":
         raise ValueError("frame_v2 currently supports equal weighting only")
 
-    target = pd.DataFrame(float("nan"), index=selection_mask.index, columns=selection_mask.columns)
     rebalance_dates = _rebalance_mask(selection_mask.index, spec.rebalance_frequency)
     gross_exposure = float(spec.gross_exposure)
+    selected = selection_mask.fillna(False).astype(bool)
 
-    for timestamp in selection_mask.index[rebalance_dates]:
-        chosen = selection_mask.loc[timestamp].fillna(False)
-        target.loc[timestamp, :] = 0.0
-        active_columns = list(chosen.index[chosen])
-        if not active_columns:
-            continue
-        weight = gross_exposure / len(active_columns)
-        target.loc[timestamp, active_columns] = weight
+    if spec.rebalance_frequency == "every_bar":
+        counts = selected.sum(axis=1).replace(0, np.nan)
+        target = selected.astype(float).mul(gross_exposure).div(counts, axis=0)
+        return target.fillna(0.0)
 
+    rebalance_index = selection_mask.index[rebalance_dates]
+    target = pd.DataFrame(float("nan"), index=selection_mask.index, columns=selection_mask.columns)
+    if len(rebalance_index) == 0:
+        return target
+
+    rebalance_selected = selected.loc[rebalance_index]
+    counts = rebalance_selected.sum(axis=1).replace(0, np.nan)
+    rebalance_target = rebalance_selected.astype(float).mul(gross_exposure).div(counts, axis=0).fillna(0.0)
+    target.loc[rebalance_index, :] = rebalance_target
     return target

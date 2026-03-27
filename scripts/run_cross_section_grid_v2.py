@@ -16,8 +16,9 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from lib.dataframes import build_long_frame_from_candle_dir, build_wide_frames_from_candle_dir
-from lib.features_v2 import build_feature_frames_from_cache
+from lib.dataframes import build_long_frame_from_candle_dir, build_wide_frames_from_candle_dir, read_wide_frames_from_cache
+from lib.feature_graph_v2 import referenced_markets_for_feature_specs, required_source_columns_for_feature_specs
+from lib.features_v2 import SUPPORTED_SOURCE_COLUMNS, build_feature_frames_from_cache
 from lib.spec_io import (
     load_feature_specs_from_payload,
     load_universe_spec_from_payload,
@@ -127,6 +128,40 @@ def _selection_stats(weight_frame: pd.DataFrame) -> dict[str, float | int]:
     }
 
 
+def _resolve_required_feature_markets(
+    feature_specs,
+    universe_payload: dict[str, Any],
+) -> list[str] | None:
+    universe_spec = load_universe_spec_from_payload(universe_payload)
+    if not universe_spec.allowed_markets:
+        return None
+    markets = {str(market).upper() for market in universe_spec.allowed_markets}
+    markets.update(referenced_markets_for_feature_specs(feature_specs))
+    return sorted(markets)
+
+
+def _read_warning_frame(
+    source_cache_dir: Path,
+    *,
+    market_columns: list[str] | None = None,
+    max_markets: int | None = None,
+) -> pd.DataFrame:
+    warning_path = source_cache_dir / "market_warning.parquet"
+    requested_columns = None if market_columns is None else sorted({str(column).upper() for column in market_columns})
+    try:
+        warning_frame = pd.read_parquet(warning_path, columns=requested_columns)
+    except Exception:
+        warning_frame = pd.read_parquet(warning_path)
+        if requested_columns is not None:
+            warning_frame = warning_frame.reindex(columns=requested_columns)
+    warning_frame.index = pd.to_datetime(warning_frame.index, utc=False)
+    if requested_columns is not None:
+        warning_frame = warning_frame.reindex(columns=requested_columns)
+    elif max_markets is not None:
+        warning_frame = warning_frame.reindex(columns=sorted(warning_frame.columns)[:max_markets])
+    return warning_frame.sort_index().sort_index(axis=1)
+
+
 def _write_numeric_cache(
     candle_dir: Path,
     cache_dir: Path,
@@ -220,22 +255,22 @@ def _run_v2_backtest(
     candle_dir: Path,
     source_cache_dir: Path,
     feature_frames: dict[str, pd.DataFrame],
+    warning_frame: pd.DataFrame,
+    required_feature_markets: list[str] | None,
     universe_payload: dict[str, Any],
     weight_payload: dict[str, Any],
     vectorbt_payload: dict[str, Any],
     backtest_dir: Path,
+    price_frame_cache: dict[tuple[str, str, str, int | None], pd.DataFrame],
     max_markets: int | None,
     tail_hours: int | None,
     compute_rolling_ir_enabled: bool,
     print_run_summary: bool,
+    save_run_artifacts: bool,
 ) -> tuple[pd.Series, pd.DataFrame]:
     universe_spec = load_universe_spec_from_payload(universe_payload)
     weight_spec = load_weight_spec_from_payload(weight_payload)
 
-    warning_frame = pd.read_parquet(source_cache_dir / "market_warning.parquet")
-    warning_frame.index = pd.to_datetime(warning_frame.index, utc=False)
-    if max_markets is not None:
-        warning_frame = warning_frame.reindex(columns=sorted(warning_frame.columns)[:max_markets])
     reference_index = next(iter(feature_frames.values())).index
     warning_frame = warning_frame.reindex(index=reference_index)
 
@@ -247,13 +282,31 @@ def _run_v2_backtest(
     fees = float(vectorbt_payload.get("fees", 0.0))
     slippage = float(vectorbt_payload.get("slippage", 0.0))
     benchmark_market = str(vectorbt_payload.get("benchmark_market", "KRW-BTC"))
-
-    price_frame = load_price_frame(
-        candle_dir,
-        price_column,
-        load_mode="wide",
-        source_cache_dir=source_cache_dir,
+    required_price_markets = (
+        sorted(set(required_feature_markets) | {benchmark_market.upper()})
+        if required_feature_markets is not None
+        else None
     )
+
+    price_cache_key = (
+        str(candle_dir),
+        str(source_cache_dir),
+        price_column,
+        tuple(required_price_markets) if required_price_markets is not None else (),
+        max_markets,
+    )
+    price_frame = price_frame_cache.get(price_cache_key)
+    if price_frame is None:
+        price_frame = load_price_frame(
+            candle_dir,
+            price_column,
+            load_mode="wide",
+            source_cache_dir=source_cache_dir,
+            market_columns=required_price_markets,
+        )
+        if required_price_markets is None and max_markets is not None:
+            price_frame = price_frame.reindex(columns=sorted(price_frame.columns)[:max_markets])
+        price_frame_cache[price_cache_key] = price_frame
     price_frame, weight_frame, trimmed_start_timestamp = trim_frames_to_first_weight(
         price_frame,
         weight_frame,
@@ -341,15 +394,16 @@ def _run_v2_backtest(
         ]
     )
 
-    backtest_dir.mkdir(parents=True, exist_ok=True)
     if print_run_summary:
         print_summary(summary)
-    write_summary_csv(backtest_dir / "summary.csv", summary)
-    write_equity_csv(backtest_dir / "equity_curve.csv", equity_curve)
-    write_equity_csv(backtest_dir / "benchmark_curve.csv", aligned_benchmark_curve)
-    write_equity_csv(backtest_dir / "excess_equity_curve.csv", excess_equity_curve)
-    if compute_rolling_ir_enabled:
-        write_equity_csv(backtest_dir / "rolling_information_ratio.csv", rolling_ir)
+    if save_run_artifacts:
+        backtest_dir.mkdir(parents=True, exist_ok=True)
+        write_summary_csv(backtest_dir / "summary.csv", summary)
+        write_equity_csv(backtest_dir / "equity_curve.csv", equity_curve)
+        write_equity_csv(backtest_dir / "benchmark_curve.csv", aligned_benchmark_curve)
+        write_equity_csv(backtest_dir / "excess_equity_curve.csv", excess_equity_curve)
+        if compute_rolling_ir_enabled:
+            write_equity_csv(backtest_dir / "rolling_information_ratio.csv", rolling_ir)
     return summary, weight_frame
 
 
@@ -372,6 +426,7 @@ def main() -> None:
     run_name_template = config["run_name_template"]
     compute_rolling_ir_enabled = bool(config.get("compute_rolling_ir", False))
     print_run_summaries = bool(config.get("print_run_summaries", False))
+    save_run_artifacts = bool(config.get("save_run_artifacts", False))
     max_markets = config.get("max_markets")
     tail_hours = config.get("tail_hours")
 
@@ -383,18 +438,59 @@ def main() -> None:
     shared_feature_payload = config.get("shared_feature_spec_template")
     shared_feature_frames: dict[str, pd.DataFrame] | None = None
     shared_feature_rows: int | None = None
+    shared_required_feature_markets: list[str] | None = None
     if shared_feature_payload:
         shared_specs = load_feature_specs_from_payload(shared_feature_payload)
+        shared_required_sets: list[set[str]] = []
+        shared_markets_resolvable = True
+        for combo in combinations:
+            context = dict(combo)
+            context["run_name"] = run_name_template.format(**context)
+            universe_payload = _render_value(config["universe_spec_template"], context)
+            required_markets = _resolve_required_feature_markets(shared_specs, universe_payload)
+            if required_markets is None:
+                shared_markets_resolvable = False
+                break
+            shared_required_sets.append(set(required_markets))
+        if shared_markets_resolvable and shared_required_sets:
+            shared_required_feature_markets = sorted(set().union(*shared_required_sets))
+        shared_required_columns, shared_uses_market_source = required_source_columns_for_feature_specs(
+            shared_specs,
+            SUPPORTED_SOURCE_COLUMNS,
+        )
+        shared_source_frames = read_wide_frames_from_cache(
+            source_cache_dir,
+            sorted(shared_required_columns or {"trade_price"}),
+            market_columns=shared_required_feature_markets,
+            max_markets=(
+                None
+                if (shared_uses_market_source or shared_required_feature_markets is not None)
+                else max_markets
+            ),
+        )
         shared_feature_frames = build_feature_frames_from_cache(
             source_cache_dir,
             shared_specs,
-            max_markets=max_markets,
+            market_columns=shared_required_feature_markets,
+            max_markets=None if shared_required_feature_markets is not None else max_markets,
             tail_rows=tail_hours,
+            source_frames=shared_source_frames,
+            frame_cache=node_frame_cache,
+            frame_cache_namespace=(
+                "grid_v2",
+                tuple(sorted(shared_required_columns or {"trade_price"})),
+                tuple(shared_required_feature_markets or ()),
+                tail_hours,
+            ),
         )
         primary_frame = next(iter(shared_feature_frames.values()))
         shared_feature_rows = int(primary_frame.notna().sum().sum())
 
-    feature_cache: dict[str, dict[str, pd.DataFrame]] = {}
+    feature_cache: dict[tuple[str, tuple[str, ...]], dict[str, pd.DataFrame]] = {}
+    node_frame_cache: dict[tuple[Any, ...], pd.DataFrame] = {}
+    source_frame_cache: dict[tuple[tuple[str, ...], tuple[str, ...], int | None], dict[str, pd.DataFrame]] = {}
+    price_frame_cache: dict[tuple[str, str, str, tuple[str, ...], int | None], pd.DataFrame] = {}
+    warning_frame_cache: dict[tuple[tuple[str, ...], int | None], pd.DataFrame] = {}
     results: list[dict[str, Any]] = []
 
     total_runs = len(combinations)
@@ -408,62 +504,116 @@ def main() -> None:
         run_dir = out_dir / run_name
         specs_dir = run_dir / "specs"
         backtest_dir = run_dir / "backtest"
-        specs_dir.mkdir(parents=True, exist_ok=True)
-        backtest_dir.mkdir(parents=True, exist_ok=True)
+        if save_run_artifacts:
+            specs_dir.mkdir(parents=True, exist_ok=True)
+            backtest_dir.mkdir(parents=True, exist_ok=True)
 
         universe_payload = _render_value(config["universe_spec_template"], context)
         weight_payload = _render_value(config["weight_spec_template"], context)
         vectorbt_payload = _render_value(config.get("vectorbt_spec_template", {}), context)
         feature_payload = None if shared_feature_frames is not None else _render_value(config["feature_spec_template"], context)
 
-        if feature_payload is not None:
+        if save_run_artifacts and feature_payload is not None:
             (specs_dir / "features.json").write_text(
                 json.dumps(feature_payload, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-        (specs_dir / "universe.json").write_text(
-            json.dumps(universe_payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        (specs_dir / "weights.json").write_text(
-            json.dumps(weight_payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        if save_run_artifacts:
+            (specs_dir / "universe.json").write_text(
+                json.dumps(universe_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            (specs_dir / "weights.json").write_text(
+                json.dumps(weight_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         result_row: dict[str, Any] = {"run_name": run_name, **combo}
         try:
+            required_feature_markets = shared_required_feature_markets
             if shared_feature_frames is not None:
                 feature_frames = shared_feature_frames
                 result_row["feature_rows"] = shared_feature_rows
                 result_row["features_source"] = "shared"
             else:
-                feature_key = _canonical_payload_key(feature_payload)
+                feature_specs = load_feature_specs_from_payload(feature_payload)
+                required_feature_markets = _resolve_required_feature_markets(
+                    feature_specs,
+                    universe_payload,
+                )
+                feature_key = (
+                    _canonical_payload_key(feature_payload),
+                    tuple(required_feature_markets) if required_feature_markets is not None else (),
+                )
                 feature_frames = feature_cache.get(feature_key)
                 if feature_frames is None:
-                    feature_specs = load_feature_specs_from_payload(feature_payload)
+                    required_columns, uses_market_source = required_source_columns_for_feature_specs(
+                        feature_specs,
+                        SUPPORTED_SOURCE_COLUMNS,
+                    )
+                    source_cache_key = (
+                        tuple(sorted(required_columns or {"trade_price"})),
+                        tuple(required_feature_markets) if required_feature_markets is not None else (),
+                        None if (uses_market_source or required_feature_markets is not None) else max_markets,
+                    )
+                    source_frames = source_frame_cache.get(source_cache_key)
+                    if source_frames is None:
+                        source_frames = read_wide_frames_from_cache(
+                            source_cache_dir,
+                            list(source_cache_key[0]),
+                            market_columns=required_feature_markets,
+                            max_markets=source_cache_key[1],
+                        )
+                        source_frame_cache[source_cache_key] = source_frames
                     feature_frames = build_feature_frames_from_cache(
                         source_cache_dir,
                         feature_specs,
-                        max_markets=max_markets,
+                        market_columns=required_feature_markets,
+                        max_markets=None if required_feature_markets is not None else max_markets,
                         tail_rows=tail_hours,
+                        source_frames=source_frames,
+                        frame_cache=node_frame_cache,
+                        frame_cache_namespace=(
+                            "grid_v2",
+                            source_cache_key[0],
+                            tuple(required_feature_markets or ()),
+                            tail_hours,
+                        ),
                     )
                     feature_cache[feature_key] = feature_frames
                 primary_frame = next(iter(feature_frames.values()))
                 result_row["feature_rows"] = int(primary_frame.notna().sum().sum())
                 result_row["features_source"] = "per_run"
 
+            warning_cache_key = (
+                tuple(required_feature_markets) if required_feature_markets is not None else (),
+                None if required_feature_markets is not None else max_markets,
+            )
+            warning_frame = warning_frame_cache.get(warning_cache_key)
+            if warning_frame is None:
+                warning_frame = _read_warning_frame(
+                    source_cache_dir,
+                    market_columns=required_feature_markets,
+                    max_markets=None if required_feature_markets is not None else max_markets,
+                )
+                warning_frame_cache[warning_cache_key] = warning_frame
+
             summary, weight_frame = _run_v2_backtest(
                 candle_dir,
                 source_cache_dir,
                 feature_frames,
+                warning_frame,
+                required_feature_markets,
                 universe_payload,
                 weight_payload,
                 vectorbt_payload,
                 backtest_dir,
+                price_frame_cache,
                 max_markets=max_markets,
                 tail_hours=tail_hours,
                 compute_rolling_ir_enabled=compute_rolling_ir_enabled,
                 print_run_summary=print_run_summaries,
+                save_run_artifacts=save_run_artifacts,
             )
             result_row.update(_selection_stats(weight_frame))
             result_row["status"] = "ok"

@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from lib.spec_io import load_universe_spec
 from lib.storage import read_table, write_table
-from lib.universe import build_universe_table, universe_columns, write_universe_table_from_feature_csv
+from lib.legacy.universe import build_universe_table, universe_columns, write_universe_table_from_feature_csv
 
 
 def build_parser() -> argparse.ArgumentParser:

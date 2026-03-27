@@ -11,6 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+from lib.feature_graph_v2 import referenced_markets_for_feature_specs
 from lib.features_v2 import build_feature_frames_from_cache
 from lib.spec_io import load_feature_specs, load_universe_spec, load_weight_spec
 from lib.universe_v2 import build_universe_mask_v2
@@ -88,6 +89,36 @@ def _write_wide_frame(path: Path, frame: pd.DataFrame) -> None:
     output.to_parquet(path, index=False)
 
 
+def _resolve_required_feature_markets(feature_specs, universe_spec) -> list[str] | None:
+    if not universe_spec.allowed_markets:
+        return None
+    markets = {str(market).upper() for market in universe_spec.allowed_markets}
+    markets.update(referenced_markets_for_feature_specs(feature_specs))
+    return sorted(markets)
+
+
+def _read_warning_frame(
+    source_cache_dir: Path,
+    *,
+    market_columns: list[str] | None = None,
+    max_markets: int | None = None,
+) -> pd.DataFrame:
+    warning_path = source_cache_dir / "market_warning.parquet"
+    requested_columns = None if market_columns is None else sorted({str(column).upper() for column in market_columns})
+    try:
+        warning_frame = pd.read_parquet(warning_path, columns=requested_columns)
+    except Exception:
+        warning_frame = pd.read_parquet(warning_path)
+        if requested_columns is not None:
+            warning_frame = warning_frame.reindex(columns=requested_columns)
+    warning_frame.index = pd.to_datetime(warning_frame.index, utc=False)
+    if requested_columns is not None:
+        warning_frame = warning_frame.reindex(columns=requested_columns)
+    elif max_markets is not None:
+        warning_frame = warning_frame.reindex(columns=sorted(warning_frame.columns)[: max_markets])
+    return warning_frame.sort_index().sort_index(axis=1)
+
+
 def main() -> None:
     args = build_parser().parse_args()
     source_cache_dir = Path(args.source_cache_dir)
@@ -99,17 +130,21 @@ def main() -> None:
     feature_specs = load_feature_specs(Path(args.feature_spec_json))
     universe_spec = load_universe_spec(Path(args.universe_spec_json))
     weight_spec = load_weight_spec(Path(args.weight_spec_json))
+    required_feature_markets = _resolve_required_feature_markets(feature_specs, universe_spec)
+    effective_max_markets = None if required_feature_markets is not None else args.max_markets
 
     feature_frames = build_feature_frames_from_cache(
         source_cache_dir,
         feature_specs,
-        max_markets=args.max_markets,
+        market_columns=required_feature_markets,
+        max_markets=effective_max_markets,
         tail_rows=args.tail_hours,
     )
-    warning_frame = pd.read_parquet(source_cache_dir / "market_warning.parquet")
-    warning_frame.index = pd.to_datetime(warning_frame.index, utc=False)
-    if args.max_markets is not None:
-        warning_frame = warning_frame.reindex(columns=sorted(warning_frame.columns)[: args.max_markets])
+    warning_frame = _read_warning_frame(
+        source_cache_dir,
+        market_columns=required_feature_markets,
+        max_markets=effective_max_markets,
+    )
     reference_index = next(iter(feature_frames.values())).index if feature_frames else warning_frame.index
     warning_frame = warning_frame.reindex(index=reference_index)
 
@@ -125,6 +160,11 @@ def main() -> None:
         "trade_price",
         load_mode="wide",
         source_cache_dir=source_cache_dir,
+        market_columns=(
+            sorted(set(required_feature_markets) | {str(args.benchmark_market).upper()})
+            if required_feature_markets is not None
+            else None
+        ),
     )
     price_frame, weight_frame, trimmed_start_timestamp = trim_frames_to_first_weight(
         price_frame,

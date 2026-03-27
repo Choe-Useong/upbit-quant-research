@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from lib.spec_io import load_weight_spec
 from lib.storage import read_table, write_table
-from lib.weights import build_weight_table, weight_columns
+from lib.legacy.weights import build_weight_table, weight_columns
 
 
 def build_parser() -> argparse.ArgumentParser:

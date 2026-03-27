@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -157,7 +157,7 @@ def _prepare_shared_features(
 
     feature_command = [
         sys.executable,
-        "scripts/build_features.py",
+        "scripts/legacy/build_features.py",
         "--candle-dir",
         str(candle_dir),
         "--spec-json",
@@ -233,7 +233,7 @@ def main() -> None:
             if shared_features_csv is None:
                 feature_command = [
                     sys.executable,
-                    "scripts/build_features.py",
+                    "scripts/legacy/build_features.py",
                     "--candle-dir",
                     str(candle_dir),
                     "--spec-json",

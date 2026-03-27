@@ -144,13 +144,22 @@ def load_price_frame(
     *,
     load_mode: str,
     source_cache_dir: Path | None = None,
+    market_columns: list[str] | tuple[str, ...] | None = None,
 ) -> pd.DataFrame:
     if load_mode == "wide":
         if source_cache_dir is not None:
             cache_path = source_cache_dir / f"{price_column}.parquet"
             if cache_path.exists():
-                return read_wide_frame_from_cache(source_cache_dir, price_column)
-        return build_wide_frame_from_candle_dir(candle_dir, price_column)
+                return read_wide_frame_from_cache(
+                    source_cache_dir,
+                    price_column,
+                    market_columns=market_columns,
+                )
+        frame = build_wide_frame_from_candle_dir(candle_dir, price_column)
+        if market_columns is not None:
+            requested_columns = sorted({str(column).upper() for column in market_columns})
+            frame = frame.reindex(columns=requested_columns)
+        return frame
 
     candle_rows = load_all_candles(candle_dir)
     return build_price_frame(candle_rows, price_column)

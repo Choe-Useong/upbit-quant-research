@@ -23,7 +23,7 @@ from lib.dataframes import (
     compute_market_turnover_weighted_momentum_frame,
 )
 from lib.storage import write_table_csv
-from lib.weights import weight_columns
+from lib.legacy.weights import weight_columns
 
 
 DEFAULT_EXCLUDE_MARKETS = [

@@ -15,10 +15,10 @@ import sys
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from lib.features import build_feature_table
-from lib.universe import build_universe_table
+from lib.legacy.features import build_feature_table
+from lib.legacy.universe import build_universe_table
 from lib.vectorbt_adapter import build_price_frame, build_target_weight_frame, run_portfolio_from_target_weights
-from lib.weights import build_weight_table
+from lib.legacy.weights import build_weight_table
 from scripts.run_grid import (
     _grid_combinations,
     _load_feature_specs_from_payload,

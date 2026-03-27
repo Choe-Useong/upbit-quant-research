@@ -109,14 +109,25 @@ def read_wide_frame_from_cache(
     cache_dir: Path,
     value_column: str,
     *,
+    market_columns: Sequence[str] | None = None,
     max_markets: int | None = None,
     tail_rows: int | None = None,
 ) -> pd.DataFrame:
     path = cache_dir / f"{value_column}.parquet"
-    frame = pd.read_parquet(path)
+    requested_columns = None
+    if market_columns is not None:
+        requested_columns = sorted({str(column).upper() for column in market_columns})
+    try:
+        frame = pd.read_parquet(path, columns=requested_columns)
+    except Exception:
+        frame = pd.read_parquet(path)
+        if requested_columns is not None:
+            frame = frame.reindex(columns=requested_columns)
     frame.index = pd.to_datetime(frame.index, utc=False)
     frame = frame.sort_index().sort_index(axis=1)
-    if max_markets is not None:
+    if requested_columns is not None:
+        frame = frame.reindex(columns=requested_columns)
+    elif max_markets is not None:
         frame = frame.reindex(columns=sorted(frame.columns)[:max_markets])
     if tail_rows is not None and len(frame) > tail_rows:
         frame = frame.iloc[-tail_rows:].copy()
@@ -127,6 +138,7 @@ def read_wide_frames_from_cache(
     cache_dir: Path,
     value_columns: Sequence[str],
     *,
+    market_columns: Sequence[str] | None = None,
     max_markets: int | None = None,
     tail_rows: int | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -134,6 +146,7 @@ def read_wide_frames_from_cache(
         value_column: read_wide_frame_from_cache(
             cache_dir,
             value_column,
+            market_columns=market_columns,
             max_markets=max_markets,
             tail_rows=tail_rows,
         )

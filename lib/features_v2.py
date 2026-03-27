@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
@@ -243,14 +243,22 @@ def build_feature_frames_from_cache(
     cache_dir: Path,
     feature_specs: Sequence[FeatureSpec],
     *,
+    market_columns: Sequence[str] | None = None,
     max_markets: int | None = None,
     tail_rows: int | None = None,
+    source_frames: dict[str, pd.DataFrame] | None = None,
+    frame_cache: dict[tuple[Any, ...], pd.DataFrame] | None = None,
+    frame_cache_namespace: tuple[Any, ...] | None = None,
 ) -> dict[str, pd.DataFrame]:
     from lib.feature_graph_v2 import build_feature_frames_from_cache_graph
 
     return build_feature_frames_from_cache_graph(
         cache_dir,
         feature_specs,
+        market_columns=market_columns,
         max_markets=max_markets,
         tail_rows=tail_rows,
+        source_frames=source_frames,
+        frame_cache=frame_cache,
+        frame_cache_namespace=frame_cache_namespace,
     )

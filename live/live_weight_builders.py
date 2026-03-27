@@ -10,11 +10,11 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from lib.features import build_feature_table
-from lib.universe import build_universe_table
-from lib.weights import build_weight_table
+from lib.legacy.features import build_feature_table
+from lib.legacy.universe import build_universe_table
+from lib.legacy.weights import build_weight_table
 from lib.upbit_collector import CandleRow, Market, fetch_minute_candle_batch
-from scripts.build_features import load_feature_specs
+from lib.spec_io import load_feature_specs
 from scripts.build_universe import load_universe_spec
 from scripts.build_weights import load_weight_spec
 
