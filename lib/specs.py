@@ -22,6 +22,25 @@ class ScoreComponentSpec:
 
 
 @dataclass(frozen=True)
+class MarketScoreComponentSpec:
+    feature_column: str
+    weight: float = 1.0
+
+
+@dataclass(frozen=True)
+class MarketScoreRuleSpec:
+    market: str
+    mode: str = "weighted_sum"
+    components: tuple[MarketScoreComponentSpec, ...] = ()
+
+
+@dataclass(frozen=True)
+class MarketScoreSpec:
+    output_column: str = "custom_score"
+    rules: tuple[MarketScoreRuleSpec, ...] = ()
+
+
+@dataclass(frozen=True)
 class CompareSpec:
     left_feature: str
     operator: str

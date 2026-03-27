@@ -19,8 +19,11 @@ if str(ROOT_DIR) not in sys.path:
 from lib.dataframes import build_long_frame_from_candle_dir, build_wide_frames_from_candle_dir, read_wide_frames_from_cache
 from lib.feature_graph_v2 import referenced_markets_for_feature_specs, required_source_columns_for_feature_specs
 from lib.features_v2 import SUPPORTED_SOURCE_COLUMNS, build_feature_frames_from_cache
+from lib.market_scores_v2 import build_market_score_frame, required_markets_for_market_score_spec
 from lib.spec_io import (
     load_feature_specs_from_payload,
+    load_market_score_spec,
+    load_market_score_spec_from_payload,
     load_universe_spec_from_payload,
     load_weight_spec_from_payload,
 )
@@ -131,12 +134,17 @@ def _selection_stats(weight_frame: pd.DataFrame) -> dict[str, float | int]:
 def _resolve_required_feature_markets(
     feature_specs,
     universe_payload: dict[str, Any],
+    market_score_spec=None,
 ) -> list[str] | None:
     universe_spec = load_universe_spec_from_payload(universe_payload)
-    if not universe_spec.allowed_markets:
-        return None
-    markets = {str(market).upper() for market in universe_spec.allowed_markets}
+    markets: set[str] = set()
+    if universe_spec.allowed_markets:
+        markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+    if market_score_spec is not None:
+        markets.update(required_markets_for_market_score_spec(market_score_spec))
     markets.update(referenced_markets_for_feature_specs(feature_specs))
+    if not markets:
+        return None
     return sorted(markets)
 
 
@@ -422,6 +430,12 @@ def main() -> None:
     out_dir = Path(config.get("out_dir", "data/grid/cross_section_v2"))
     out_dir.mkdir(parents=True, exist_ok=True)
     source_cache_dir = _resolve_source_cache_dir(config, candle_dir, out_dir)
+    market_score_spec_path = config.get("market_scores_spec_json")
+    static_market_score_spec = (
+        load_market_score_spec(Path(str(market_score_spec_path)))
+        if market_score_spec_path
+        else None
+    )
 
     run_name_template = config["run_name_template"]
     compute_rolling_ir_enabled = bool(config.get("compute_rolling_ir", False))
@@ -435,6 +449,13 @@ def main() -> None:
     if not combinations:
         raise SystemExit("No valid grid combinations after applying constraints")
 
+    feature_cache: dict[tuple[str, tuple[str, ...], str], dict[str, pd.DataFrame]] = {}
+    node_frame_cache: dict[tuple[Any, ...], pd.DataFrame] = {}
+    source_frame_cache: dict[tuple[tuple[str, ...], tuple[str, ...], int | None], dict[str, pd.DataFrame]] = {}
+    price_frame_cache: dict[tuple[str, str, str, tuple[str, ...], int | None], pd.DataFrame] = {}
+    warning_frame_cache: dict[tuple[tuple[str, ...], int | None], pd.DataFrame] = {}
+    results: list[dict[str, Any]] = []
+
     shared_feature_payload = config.get("shared_feature_spec_template")
     shared_feature_frames: dict[str, pd.DataFrame] | None = None
     shared_feature_rows: int | None = None
@@ -447,7 +468,17 @@ def main() -> None:
             context = dict(combo)
             context["run_name"] = run_name_template.format(**context)
             universe_payload = _render_value(config["universe_spec_template"], context)
-            required_markets = _resolve_required_feature_markets(shared_specs, universe_payload)
+            rendered_market_score_payload = (
+                _render_value(config["market_scores_spec_template"], context)
+                if config.get("market_scores_spec_template") is not None
+                else None
+            )
+            market_score_spec = (
+                load_market_score_spec_from_payload(rendered_market_score_payload)
+                if rendered_market_score_payload is not None
+                else static_market_score_spec
+            )
+            required_markets = _resolve_required_feature_markets(shared_specs, universe_payload, market_score_spec)
             if required_markets is None:
                 shared_markets_resolvable = False
                 break
@@ -483,15 +514,10 @@ def main() -> None:
                 tail_hours,
             ),
         )
+        if static_market_score_spec is not None:
+            shared_feature_frames[static_market_score_spec.output_column] = build_market_score_frame(shared_feature_frames, static_market_score_spec)
         primary_frame = next(iter(shared_feature_frames.values()))
         shared_feature_rows = int(primary_frame.notna().sum().sum())
-
-    feature_cache: dict[tuple[str, tuple[str, ...]], dict[str, pd.DataFrame]] = {}
-    node_frame_cache: dict[tuple[Any, ...], pd.DataFrame] = {}
-    source_frame_cache: dict[tuple[tuple[str, ...], tuple[str, ...], int | None], dict[str, pd.DataFrame]] = {}
-    price_frame_cache: dict[tuple[str, str, str, tuple[str, ...], int | None], pd.DataFrame] = {}
-    warning_frame_cache: dict[tuple[tuple[str, ...], int | None], pd.DataFrame] = {}
-    results: list[dict[str, Any]] = []
 
     total_runs = len(combinations)
 
@@ -511,6 +537,16 @@ def main() -> None:
         universe_payload = _render_value(config["universe_spec_template"], context)
         weight_payload = _render_value(config["weight_spec_template"], context)
         vectorbt_payload = _render_value(config.get("vectorbt_spec_template", {}), context)
+        market_score_payload = (
+            _render_value(config["market_scores_spec_template"], context)
+            if config.get("market_scores_spec_template") is not None
+            else None
+        )
+        market_score_spec = (
+            load_market_score_spec_from_payload(market_score_payload)
+            if market_score_payload is not None
+            else static_market_score_spec
+        )
         feature_payload = None if shared_feature_frames is not None else _render_value(config["feature_spec_template"], context)
 
         if save_run_artifacts and feature_payload is not None:
@@ -532,7 +568,9 @@ def main() -> None:
         try:
             required_feature_markets = shared_required_feature_markets
             if shared_feature_frames is not None:
-                feature_frames = shared_feature_frames
+                feature_frames = dict(shared_feature_frames)
+                if market_score_payload is not None:
+                    feature_frames[market_score_spec.output_column] = build_market_score_frame(feature_frames, market_score_spec)
                 result_row["feature_rows"] = shared_feature_rows
                 result_row["features_source"] = "shared"
             else:
@@ -540,10 +578,14 @@ def main() -> None:
                 required_feature_markets = _resolve_required_feature_markets(
                     feature_specs,
                     universe_payload,
+                    market_score_spec,
                 )
                 feature_key = (
                     _canonical_payload_key(feature_payload),
                     tuple(required_feature_markets) if required_feature_markets is not None else (),
+                    _canonical_payload_key(market_score_payload) if market_score_payload is not None else (
+                        str(Path(str(market_score_spec_path)).resolve()) if market_score_spec_path else ""
+                    ),
                 )
                 feature_frames = feature_cache.get(feature_key)
                 if feature_frames is None:
@@ -562,7 +604,7 @@ def main() -> None:
                             source_cache_dir,
                             list(source_cache_key[0]),
                             market_columns=required_feature_markets,
-                            max_markets=source_cache_key[1],
+                            max_markets=source_cache_key[2],
                         )
                         source_frame_cache[source_cache_key] = source_frames
                     feature_frames = build_feature_frames_from_cache(
@@ -580,6 +622,9 @@ def main() -> None:
                             tail_hours,
                         ),
                     )
+                    if market_score_spec is not None:
+                        feature_frames = dict(feature_frames)
+                        feature_frames[market_score_spec.output_column] = build_market_score_frame(feature_frames, market_score_spec)
                     feature_cache[feature_key] = feature_frames
                 primary_frame = next(iter(feature_frames.values()))
                 result_row["feature_rows"] = int(primary_frame.notna().sum().sum())

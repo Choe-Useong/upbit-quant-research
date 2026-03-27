@@ -7,6 +7,9 @@ from lib.specs import (
     CompareSpec,
     FeatureSpec,
     LogicalSpec,
+    MarketScoreComponentSpec,
+    MarketScoreRuleSpec,
+    MarketScoreSpec,
     RankFilterSpec,
     ScoreComponentSpec,
     StateSpec,
@@ -147,3 +150,28 @@ def load_weight_spec_from_payload(payload: dict) -> WeightSpec:
 def load_weight_spec(path: Path) -> WeightSpec:
     payload = json.loads(path.read_text(encoding="utf-8-sig"))
     return load_weight_spec_from_payload(payload)
+
+
+def load_market_score_spec_from_payload(payload: dict) -> MarketScoreSpec:
+    return MarketScoreSpec(
+        output_column=str(payload.get("output_column", "custom_score")),
+        rules=tuple(
+            MarketScoreRuleSpec(
+                market=str(item["market"]).upper(),
+                mode=str(item.get("mode", "weighted_sum")),
+                components=tuple(
+                    MarketScoreComponentSpec(
+                        feature_column=str(component["feature_column"]),
+                        weight=float(component.get("weight", 1.0)),
+                    )
+                    for component in item.get("components", [])
+                ),
+            )
+            for item in payload.get("rules", [])
+        ),
+    )
+
+
+def load_market_score_spec(path: Path) -> MarketScoreSpec:
+    payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    return load_market_score_spec_from_payload(payload)

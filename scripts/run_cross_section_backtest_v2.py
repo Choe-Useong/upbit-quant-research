@@ -13,7 +13,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from lib.feature_graph_v2 import referenced_markets_for_feature_specs
 from lib.features_v2 import build_feature_frames_from_cache
-from lib.spec_io import load_feature_specs, load_universe_spec, load_weight_spec
+from lib.market_scores_v2 import build_market_score_frame, required_markets_for_market_score_spec
+from lib.spec_io import load_feature_specs, load_market_score_spec, load_universe_spec, load_weight_spec
 from lib.universe_v2 import build_universe_mask_v2
 from lib.weights_v2 import build_weight_frame_v2
 from lib.vectorbt_adapter import VectorBTSpec, run_portfolio_from_target_weights
@@ -48,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candle-dir", required=True, help="Raw candle dir for fallback/timeframe metadata")
     parser.add_argument("--source-cache-dir", required=True, help="Wide source cache directory")
     parser.add_argument("--feature-spec-json", required=True, help="Feature spec JSON path")
+    parser.add_argument("--market-scores-spec-json", default="", help="Optional market score spec JSON path")
     parser.add_argument("--universe-spec-json", required=True, help="Universe spec JSON path")
     parser.add_argument("--weight-spec-json", required=True, help="Weight spec JSON path")
     parser.add_argument("--portfolio-dir", required=True, help="Output directory for v2 weight files")
@@ -89,11 +91,15 @@ def _write_wide_frame(path: Path, frame: pd.DataFrame) -> None:
     output.to_parquet(path, index=False)
 
 
-def _resolve_required_feature_markets(feature_specs, universe_spec) -> list[str] | None:
-    if not universe_spec.allowed_markets:
-        return None
-    markets = {str(market).upper() for market in universe_spec.allowed_markets}
+def _resolve_required_feature_markets(feature_specs, universe_spec, market_score_spec=None) -> list[str] | None:
+    markets: set[str] = set()
+    if universe_spec.allowed_markets:
+        markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+    if market_score_spec is not None:
+        markets.update(required_markets_for_market_score_spec(market_score_spec))
     markets.update(referenced_markets_for_feature_specs(feature_specs))
+    if not markets:
+        return None
     return sorted(markets)
 
 
@@ -128,9 +134,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     feature_specs = load_feature_specs(Path(args.feature_spec_json))
+    market_score_spec = load_market_score_spec(Path(args.market_scores_spec_json)) if args.market_scores_spec_json else None
     universe_spec = load_universe_spec(Path(args.universe_spec_json))
     weight_spec = load_weight_spec(Path(args.weight_spec_json))
-    required_feature_markets = _resolve_required_feature_markets(feature_specs, universe_spec)
+    required_feature_markets = _resolve_required_feature_markets(feature_specs, universe_spec, market_score_spec)
     effective_max_markets = None if required_feature_markets is not None else args.max_markets
 
     feature_frames = build_feature_frames_from_cache(
@@ -140,6 +147,8 @@ def main() -> None:
         max_markets=effective_max_markets,
         tail_rows=args.tail_hours,
     )
+    if market_score_spec is not None:
+        feature_frames[market_score_spec.output_column] = build_market_score_frame(feature_frames, market_score_spec)
     warning_frame = _read_warning_frame(
         source_cache_dir,
         market_columns=required_feature_markets,
