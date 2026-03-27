@@ -211,7 +211,7 @@ def print_summary(summary: pd.Series) -> None:
         "CAGR [%]",
         "Longest Peak-to-Recovery Bars",
         "Second Longest Peak-to-Recovery Bars",
-        "Benchmark Return [%]",
+        "VectorBT Benchmark Return [%]",
         "Benchmark Market",
         "Benchmark Start Value",
         "Benchmark End Value",
@@ -737,6 +737,8 @@ def main() -> None:
 
     out_dir = Path(args.out_dir)
     summary = portfolio.stats(settings={"freq": pandas_freq})
+    if "Benchmark Return [%]" in summary.index:
+        summary = summary.rename(index={"Benchmark Return [%]": "VectorBT Benchmark Return [%]"})
     equity_curve = portfolio.value()
     benchmark_curve = build_benchmark_curve(price_frame, args.benchmark_market, args.init_cash)
     benchmark_stats = benchmark_summary(

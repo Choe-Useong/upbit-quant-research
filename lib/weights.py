@@ -1,64 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
+from lib.specs import WeightSpec
 
 WEIGHTING_METHODS = {"equal", "rank", "feature_value", "incremental_signal", "fixed"}
 REBALANCE_FREQUENCIES = {"every_bar", "daily", "weekly", "monthly"}
-
-
-@dataclass(frozen=True)
-class WeightSpec:
-    weighting: str = "equal"
-    gross_exposure: float = 1.0
-    fixed_weight: float | None = None
-    rank_power: float = 1.0
-    max_positions: int | None = None
-    universe_name: str | None = None
-    rebalance_frequency: str = "daily"
-    feature_value_scale: float = 1.0
-    feature_value_clip_min: float = 0.0
-    feature_value_clip_max: float = 1.0
-    incremental_step_size: float = 0.25
-    incremental_step_up: float | None = None
-    incremental_step_down: float | None = None
-    incremental_min_weight: float = 0.0
-    incremental_max_weight: float = 1.0
-
-    def resolved_name(self) -> str:
-        prefix = self.universe_name or "universe"
-        if self.weighting == "equal":
-            return (
-                f"{prefix}__equal_{self.rebalance_frequency}"
-                f"_gross{self.gross_exposure:g}"
-            )
-        if self.weighting == "feature_value":
-            return (
-                f"{prefix}__feature_value_{self.rebalance_frequency}"
-                f"_gross{self.gross_exposure:g}"
-            )
-        if self.weighting == "fixed":
-            if self.fixed_weight is None:
-                raise ValueError("fixed_weight must be provided for fixed weighting")
-            return (
-                f"{prefix}__fixed_{self.rebalance_frequency}"
-                f"_w{self.fixed_weight:g}"
-            )
-        if self.weighting == "incremental_signal":
-            step_up = self.incremental_step_up if self.incremental_step_up is not None else self.incremental_step_size
-            step_down = self.incremental_step_down if self.incremental_step_down is not None else self.incremental_step_size
-            return (
-                f"{prefix}__incremental_signal_{self.rebalance_frequency}"
-                f"_up{step_up:g}_down{step_down:g}"
-                f"_gross{self.gross_exposure:g}"
-            )
-        return (
-            f"{prefix}__rank_p{self.rank_power:g}_{self.rebalance_frequency}"
-            f"_gross{self.gross_exposure:g}"
-        )
 
 
 def _date_groups(rows: list[dict[str, str]]) -> list[list[int]]:

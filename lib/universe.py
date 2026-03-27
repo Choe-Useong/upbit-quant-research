@@ -4,71 +4,16 @@ import csv
 import itertools
 import math
 from collections import defaultdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from lib.specs import RankFilterSpec, UniverseSpec, ValueFilterSpec
+
 UNIVERSE_MODES = {"top_n", "quantile"}
 FILTER_OPERATORS = {"gt", "ge", "lt", "le", "eq", "ne"}
-
-
-@dataclass(frozen=True)
-class ValueFilterSpec:
-    feature_column: str
-    operator: str
-    value: float
-    lag: int = 0
-
-
-@dataclass(frozen=True)
-class RankFilterSpec:
-    feature_column: str
-    mode: str = "top_n"
-    lag: int = 0
-    top_n: int = 30
-    quantiles: int = 5
-    bucket_values: tuple[int, ...] = (1,)
-    ascending: bool = False
-
-
-@dataclass(frozen=True)
-class UniverseSpec:
-    feature_column: str
-    sort_column: str | None = None
-    lag: int = 1
-    signal_lag: int = 0
-    start_min_cross_section_size: int = 0
-    mode: str = "top_n"
-    top_n: int = 30
-    quantiles: int = 5
-    bucket_values: tuple[int, ...] = (1,)
-    ascending: bool = False
-    exclude_warnings: bool = False
-    min_age_days: int | None = None
-    allowed_markets: tuple[str, ...] = ()
-    excluded_markets: tuple[str, ...] = ()
-    value_filters: tuple[ValueFilterSpec, ...] = ()
-    rank_filters: tuple[RankFilterSpec, ...] = ()
-    name: str | None = None
-
-    def resolved_name(self) -> str:
-        sort_column = self.sort_column or self.feature_column
-        lag_part = f"lag{self.lag}"
-        if self.signal_lag > 0:
-            lag_part += f"_siglag{self.signal_lag}"
-        if self.start_min_cross_section_size > 0:
-            lag_part += f"_startcs{self.start_min_cross_section_size}"
-        if self.name:
-            return self.name
-        if self.mode == "top_n":
-            order = "asc" if self.ascending else "desc"
-            return f"{sort_column}_{lag_part}_{order}_top{self.top_n}"
-        order = "asc" if self.ascending else "desc"
-        buckets = "-".join(str(value) for value in self.bucket_values)
-        return f"{sort_column}_{lag_part}_{order}_q{self.quantiles}_b{buckets}"
 
 
 def _parse_float(value: str) -> float | None:

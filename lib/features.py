@@ -2,99 +2,18 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 
+from lib.specs import FeatureSpec
 from lib.upbit_collector import CandleRow
 
 
 TransformFn = Callable[[list[dict[str, str]], list[float | None], dict[str, int | float | str]], list[float | None]]
 COMPARE_OPERATORS = {"gt", "ge", "lt", "le", "eq", "ne"}
 LOGICAL_OPERATORS = {"and", "or", "not"}
-
-
-@dataclass(frozen=True)
-class TransformSpec:
-    kind: str
-    params: dict[str, int | float | str] = field(default_factory=dict)
-
-    def resolved_name(self) -> str:
-        if not self.params:
-            return self.kind
-        suffix = "_".join(f"{key}{value}" for key, value in sorted(self.params.items()))
-        return f"{self.kind}_{suffix}"
-
-
-@dataclass(frozen=True)
-class ScoreComponentSpec:
-    feature_column: str
-    weight: float = 1.0
-
-
-@dataclass(frozen=True)
-class CompareSpec:
-    left_feature: str
-    operator: str
-    right_feature: str | None = None
-    right_value: float | None = None
-
-
-@dataclass(frozen=True)
-class LogicalSpec:
-    operator: str
-    features: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class StateSpec:
-    entry_feature: str
-    exit_feature: str
-
-
-@dataclass(frozen=True)
-class FeatureSpec:
-    source: str | None = None
-    steps: tuple[TransformSpec, ...] = ()
-    components: tuple[ScoreComponentSpec, ...] = ()
-    combine: str | None = None
-    compare: CompareSpec | None = None
-    logical: LogicalSpec | None = None
-    state: StateSpec | None = None
-    column_name: str | None = None
-
-    def resolved_column_name(self) -> str:
-        if self.column_name:
-            return self.column_name
-        if self.compare is not None:
-            right = (
-                self.compare.right_feature
-                if self.compare.right_feature is not None
-                else f"value{self.compare.right_value:g}"
-            )
-            return f"{self.compare.left_feature}_{self.compare.operator}_{right}"
-        if self.logical is not None:
-            joined = "__".join(self.logical.features)
-            return f"{self.logical.operator}__{joined}"
-        if self.state is not None:
-            return f"hold__{self.state.entry_feature}__until__{self.state.exit_feature}"
-        if self.components:
-            suffix = "__".join(
-                f"{component.feature_column}_w{component.weight:g}"
-                for component in self.components
-            )
-            prefix = self.combine or "weighted_sum"
-            return f"{prefix}__{suffix}"
-        if not self.steps:
-            if self.source is None:
-                raise ValueError("FeatureSpec must define source, components, compare, logical, or state")
-            return self.source
-        suffix = "__".join(step.resolved_name() for step in self.steps)
-        if self.source is None:
-            raise ValueError("FeatureSpec with steps must define source")
-        return f"{self.source}__{suffix}"
 
 
 BASE_COLUMNS = [

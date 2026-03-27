@@ -12,12 +12,10 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from lib.features_v2 import build_feature_frames_from_cache
+from lib.spec_io import load_feature_specs, load_universe_spec, load_weight_spec
 from lib.universe_v2 import build_universe_mask_v2
 from lib.weights_v2 import build_weight_frame_v2
 from lib.vectorbt_adapter import VectorBTSpec, run_portfolio_from_target_weights
-from scripts.build_features import load_feature_specs
-from scripts.build_universe import load_universe_spec
-from scripts.build_weights import load_weight_spec
 from scripts.run_vectorbt import (
     benchmark_summary,
     build_benchmark_curve,
@@ -151,6 +149,8 @@ def main() -> None:
     )
 
     summary = portfolio.stats(settings={"freq": pandas_freq})
+    if "Benchmark Return [%]" in summary.index:
+        summary = summary.rename(index={"Benchmark Return [%]": "VectorBT Benchmark Return [%]"})
     equity_curve = portfolio.value()
     benchmark_curve = build_benchmark_curve(price_frame, args.benchmark_market, 1_000_000.0)
     aligned_benchmark_curve = benchmark_curve.reindex(equity_curve.index).ffill()

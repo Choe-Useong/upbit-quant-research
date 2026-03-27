@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from lib.dataframes import read_wide_frames_from_cache
-from lib.features import FeatureSpec
+from lib.specs import FeatureSpec
 
 
 SUPPORTED_SOURCE_COLUMNS = {
@@ -117,11 +117,31 @@ def _momentum_frame(frame: pd.DataFrame, periods: int) -> pd.DataFrame:
 
 
 def _rolling_mean_frame(frame: pd.DataFrame, window: int) -> pd.DataFrame:
-    return _apply_by_market_column(frame, lambda series: series.rolling(window, min_periods=window).mean())
+    return _apply_by_market_column(frame, lambda series: _rolling_mean_series_fast(series, window))
 
 
 def _rolling_sum_frame(frame: pd.DataFrame, window: int) -> pd.DataFrame:
-    return _apply_by_market_column(frame, lambda series: series.rolling(window, min_periods=window).sum())
+    return _apply_by_market_column(frame, lambda series: _rolling_sum_series_fast(series, window))
+
+
+def _rolling_sum_series_fast(series: pd.Series, window: int) -> pd.Series:
+    if window <= 0:
+        raise ValueError("window must be positive")
+    result = pd.Series(np.nan, index=series.index, dtype=float)
+    if len(series) < window:
+        return result
+    values = series.to_numpy(dtype=float, copy=False)
+    cumsum = np.cumsum(np.insert(values, 0, 0.0))
+    sums = cumsum[window:] - cumsum[:-window]
+    result.iloc[window - 1 :] = sums
+    return result
+
+
+def _rolling_mean_series_fast(series: pd.Series, window: int) -> pd.Series:
+    result = _rolling_sum_series_fast(series, window)
+    if result.notna().any():
+        result = result / float(window)
+    return result
 
 
 def _ewma_frame(frame: pd.DataFrame, window: int) -> pd.DataFrame:
@@ -226,47 +246,11 @@ def build_feature_frames_from_cache(
     max_markets: int | None = None,
     tail_rows: int | None = None,
 ) -> dict[str, pd.DataFrame]:
-    required_source_columns = {
-        spec.source
-        for spec in feature_specs
-        if spec.source is not None and spec.source in SUPPORTED_SOURCE_COLUMNS
-    }
-    if any(spec.source is not None and spec.source.startswith("market:") for spec in feature_specs):
-        raise ValueError("frame_v2 does not support market: sources")
-    base_frames = read_wide_frames_from_cache(
+    from lib.feature_graph_v2 import build_feature_frames_from_cache_graph
+
+    return build_feature_frames_from_cache_graph(
         cache_dir,
-        sorted(required_source_columns),
+        feature_specs,
         max_markets=max_markets,
+        tail_rows=tail_rows,
     )
-    base_frames = _apply_per_market_tail(base_frames, tail_rows)
-    frames: dict[str, pd.DataFrame] = {name: frame.copy() for name, frame in base_frames.items()}
-
-    for spec in feature_specs:
-        column_name = spec.resolved_column_name()
-        if spec.components or spec.logical or spec.state:
-            raise ValueError("frame_v2 does not support components/logical/state yet")
-        if spec.compare is not None:
-            compare = spec.compare
-            if compare.left_feature not in frames:
-                raise ValueError(f"Unknown compare left feature for frame_v2: {compare.left_feature}")
-            if compare.right_feature is None and compare.right_value is None:
-                raise ValueError("CompareSpec must define right_feature or right_value")
-            left = frames[compare.left_feature]
-            if compare.right_feature is not None:
-                if compare.right_feature not in frames:
-                    raise ValueError(f"Unknown compare right feature for frame_v2: {compare.right_feature}")
-                frames[column_name] = _compare_frames(left, compare.operator, frames[compare.right_feature])
-            else:
-                frames[column_name] = _compare_frames(left, compare.operator, float(compare.right_value))
-            continue
-
-        if spec.source is None:
-            raise ValueError("frame_v2 feature spec must define source or compare")
-        if spec.source not in frames:
-            raise ValueError(f"Unknown source column for frame_v2: {spec.source}")
-        current = frames[spec.source].copy()
-        for step in spec.steps:
-            current = _apply_transform(current, step.kind, step.params)
-        frames[column_name] = current
-
-    return frames

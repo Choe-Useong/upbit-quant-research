@@ -1,0 +1,22 @@
+{
+  "name": "upbit_btc_ma10_gt_ma120_siglag1_startcs1_age60",
+  "feature_column": "sma_10",
+  "lag": 0,
+  "signal_lag": 1,
+  "mode": "top_n",
+  "top_n": 1,
+  "ascending": false,
+  "exclude_warnings": false,
+  "allowed_markets": [
+    "KRW-BTC"
+  ],
+  "min_age_days": 60,
+  "start_min_cross_section_size": 1,
+  "value_filters": [
+    {
+      "feature_column": "sma10_gt_sma120",
+      "operator": "eq",
+      "value": 1.0
+    }
+  ]
+}

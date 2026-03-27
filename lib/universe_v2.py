@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from lib.universe import RankFilterSpec, UniverseSpec, ValueFilterSpec
+from lib.specs import RankFilterSpec, UniverseSpec, ValueFilterSpec
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from lib.weights import WeightSpec
+from lib.specs import WeightSpec
 
 
 def _rebalance_mask(index: pd.Index, frequency: str) -> pd.Series:

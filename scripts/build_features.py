@@ -19,16 +19,9 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from lib.dataframes import read_wide_frames_from_cache
-from lib.features import (
-    CompareSpec,
-    FeatureSpec,
-    LogicalSpec,
-    ScoreComponentSpec,
-    StateSpec,
-    TransformSpec,
-    build_feature_table,
-    feature_columns,
-)
+from lib.features import build_feature_table, feature_columns
+from lib.spec_io import load_feature_specs
+from lib.specs import FeatureSpec
 from lib.storage import read_candles_csv, write_table
 from lib.upbit_collector import CandleRow
 
@@ -78,65 +71,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional wide-parquet source cache directory, e.g. data/upbit_research_cache/60",
     )
     return parser
-
-
-def load_feature_specs(path: Path) -> list[FeatureSpec]:
-    payload = json.loads(path.read_text(encoding="utf-8-sig"))
-    specs: list[FeatureSpec] = []
-    for item in payload:
-        steps = tuple(
-            TransformSpec(kind=step["kind"], params=step.get("params", {}))
-            for step in item.get("steps", [])
-        )
-        components = tuple(
-            ScoreComponentSpec(
-                feature_column=component["feature_column"],
-                weight=float(component.get("weight", 1.0)),
-            )
-            for component in item.get("components", [])
-        )
-        compare = None
-        if "compare" in item:
-            compare_payload = item["compare"]
-            compare = CompareSpec(
-                left_feature=compare_payload["left_feature"],
-                operator=compare_payload["operator"],
-                right_feature=compare_payload.get("right_feature"),
-                right_value=(
-                    None
-                    if compare_payload.get("right_value") is None
-                    else float(compare_payload["right_value"])
-                ),
-            )
-        logical = None
-        if "logical" in item:
-            logical_payload = item["logical"]
-            logical = LogicalSpec(
-                operator=logical_payload["operator"],
-                features=tuple(logical_payload["features"]),
-            )
-        state = None
-        if "state" in item:
-            state_payload = item["state"]
-            state = StateSpec(
-                entry_feature=state_payload["entry_feature"],
-                exit_feature=state_payload["exit_feature"],
-            )
-        specs.append(
-            FeatureSpec(
-                source=item.get("source"),
-                steps=steps,
-                components=components,
-                combine=item.get("combine"),
-                compare=compare,
-                logical=logical,
-                state=state,
-                column_name=item.get("column_name"),
-            )
-        )
-    return specs
-
-
 def list_candle_paths(candle_dir: Path, max_markets: int | None = None) -> list[Path]:
     csv_paths = sorted(candle_dir.glob("*.csv"))
     if max_markets is not None:
