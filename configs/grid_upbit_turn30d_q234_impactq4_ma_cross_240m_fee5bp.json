@@ -1,0 +1,174 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turn30d_q234_impactq4_ma_cross_240m_fee5bp",
+  "run_name_template": "upbit_240m_turnq{turnover_bucket}_impactq{impact_bucket}_ma{short_window}_{long_window}_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "candle_acc_trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 180
+          }
+        }
+      ],
+      "column_name": "turnover_30d_avg"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "simple_return",
+          "params": {
+            "window": 1
+          }
+        },
+        {
+          "kind": "abs"
+        },
+        {
+          "kind": "ratio_to_reference",
+          "params": {
+            "reference": "candle_acc_trade_price"
+          }
+        },
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 180
+          }
+        }
+      ],
+      "column_name": "impact_30d_avg"
+    }
+  ],
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{short_window}"
+          }
+        }
+      ],
+      "column_name": "sma_{short_window}"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{long_window}"
+          }
+        }
+      ],
+      "column_name": "sma_{long_window}"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_{short_window}",
+        "operator": "gt",
+        "right_feature": "sma_{long_window}"
+      },
+      "column_name": "sma{short_window}_gt_sma{long_window}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "impact_30d_avg",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "quantile",
+    "quantiles": 4,
+    "bucket_values": [
+      "{impact_bucket}"
+    ],
+    "ascending": true,
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "value_filters": [
+      {
+        "feature_column": "sma{short_window}_gt_sma{long_window}",
+        "operator": "gt",
+        "value": 0.0,
+        "lag": 0
+      }
+    ],
+    "rank_filters": [
+      {
+        "feature_column": "turnover_30d_avg",
+        "mode": "quantile",
+        "lag": 0,
+        "quantiles": 4,
+        "bucket_values": [
+          "{turnover_bucket}"
+        ],
+        "ascending": true
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "turnover_bucket": [
+      2,
+      3,
+      4
+    ],
+    "impact_bucket": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "short_window": [
+      2,
+      3,
+      5,
+      8
+    ],
+    "long_window": [
+      10,
+      20,
+      30,
+      40,
+      60
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  },
+  "constraints": [
+    "short_window < long_window"
+  ]
+}

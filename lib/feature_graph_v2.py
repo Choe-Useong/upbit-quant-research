@@ -155,8 +155,16 @@ def _spec_dependencies(spec: FeatureSpec, supported_source_columns: set[str]) ->
             return []
         return [column]
     if spec.source in supported_source_columns:
-        return []
-    return [spec.source]
+        dependencies: list[str] = []
+    else:
+        dependencies = [spec.source]
+    for step in spec.steps:
+        if step.kind not in {"subtract_reference", "ratio_to_reference"}:
+            continue
+        reference = str(step.params["reference"])
+        if reference not in supported_source_columns:
+            dependencies.append(reference)
+    return dependencies
 
 
 def _step_signature(spec: FeatureSpec) -> tuple[Any, ...]:
@@ -230,6 +238,7 @@ def build_feature_frames_from_cache_graph(
             market_columns=market_columns,
             max_markets=None if uses_market_source else max_markets,
         )
+        extra_frames: dict[str, pd.DataFrame] = {}
     else:
         missing_columns = sorted(required_source_columns.difference(source_frames.keys()))
         if missing_columns:
@@ -237,6 +246,11 @@ def build_feature_frames_from_cache_graph(
         raw_source_frames = {
             name: source_frames[name].copy()
             for name in sorted(required_source_columns)
+        }
+        extra_frames = {
+            name: frame.copy()
+            for name, frame in source_frames.items()
+            if name not in raw_source_frames
         }
     raw_source_frames = ops._apply_per_market_tail(raw_source_frames, tail_rows)
 
@@ -249,6 +263,8 @@ def build_feature_frames_from_cache_graph(
         name: frame.reindex(index=output_index, columns=output_columns).copy()
         for name, frame in raw_source_frames.items()
     }
+    for name, frame in extra_frames.items():
+        frames[name] = frame.reindex(index=output_index, columns=output_columns).copy()
 
     specs_by_name: dict[str, FeatureSpec] = {}
     for spec in feature_specs:
@@ -337,7 +353,7 @@ def build_feature_frames_from_cache_graph(
                 current = frames[spec.source].copy()
 
             for step in spec.steps:
-                current = ops._apply_transform(current, step.kind, step.params)
+                current = ops._apply_transform(current, step.kind, step.params, frames)
             frames[name] = current.reindex(index=output_index, columns=output_columns).sort_index(axis=1)
             if cache_key is not None:
                 frame_cache[cache_key] = frames[name]

@@ -1,0 +1,107 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turn7davg_q12_momq3_240m_fee5bp",
+  "run_name_template": "upbit_240m_turnq{turnover_bucket}_momq{momentum_bucket}_momw{momentum_window}_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "candle_acc_trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 42
+          }
+        }
+      ],
+      "column_name": "turnover_7d_avg"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    }
+  ],
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "momentum",
+          "params": {
+            "window": "{momentum_window}"
+          }
+        }
+      ],
+      "column_name": "mom_{momentum_window}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "mom_{momentum_window}",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "quantile",
+    "quantiles": 3,
+    "bucket_values": [
+      "{momentum_bucket}"
+    ],
+    "ascending": false,
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "rank_filters": [
+      {
+        "feature_column": "turnover_7d_avg",
+        "mode": "quantile",
+        "lag": 0,
+        "quantiles": 3,
+        "bucket_values": [
+          "{turnover_bucket}"
+        ],
+        "ascending": true
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "turnover_bucket": [
+      2,
+      3
+    ],
+    "momentum_bucket": [
+      1,
+      2,
+      3
+    ],
+    "momentum_window": [
+      18,
+      42,
+      84,
+      168
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  }
+}

@@ -22,8 +22,10 @@ SUPPORTED_SOURCE_COLUMNS = {
 }
 
 SUPPORTED_TRANSFORMS = {
+    "abs",
     "rolling_mean",
     "rolling_sum",
+    "rolling_zscore",
     "momentum",
     "simple_return",
     "delta",
@@ -31,6 +33,9 @@ SUPPORTED_TRANSFORMS = {
     "age_days",
     "cross_rank",
     "cross_percentile",
+    "gaussian_signed",
+    "subtract_reference",
+    "ratio_to_reference",
 }
 
 
@@ -108,6 +113,10 @@ def _simple_return_frame(frame: pd.DataFrame, periods: int) -> pd.DataFrame:
     return _apply_by_market_column(frame, lambda series: (series / series.shift(periods)) - 1.0)
 
 
+def _abs_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    return frame.astype(float).abs()
+
+
 def _momentum_frame(frame: pd.DataFrame, periods: int) -> pd.DataFrame:
     def _transform(series: pd.Series) -> pd.Series:
         positive = series.where(series > 0.0)
@@ -144,8 +153,36 @@ def _rolling_mean_series_fast(series: pd.Series, window: int) -> pd.Series:
     return result
 
 
+def _rolling_zscore_series_fast(series: pd.Series, window: int) -> pd.Series:
+    if window <= 0:
+        raise ValueError("window must be positive")
+    result = pd.Series(np.nan, index=series.index, dtype=float)
+    if len(series) < window:
+        return result
+
+    values = series.to_numpy(dtype=float, copy=False)
+    cumsum = np.cumsum(np.insert(values, 0, 0.0))
+    cumsum_sq = np.cumsum(np.insert(values * values, 0, 0.0))
+    sums = cumsum[window:] - cumsum[:-window]
+    sums_sq = cumsum_sq[window:] - cumsum_sq[:-window]
+    means = sums / float(window)
+    variances = (sums_sq / float(window)) - (means * means)
+    variances = np.maximum(variances, 0.0)
+    stds = np.sqrt(variances)
+    current = values[window - 1 :]
+    zscores = np.full_like(current, np.nan, dtype=float)
+    nonzero = stds > 0.0
+    zscores[nonzero] = (current[nonzero] - means[nonzero]) / stds[nonzero]
+    result.iloc[window - 1 :] = zscores
+    return result
+
+
 def _ewma_frame(frame: pd.DataFrame, window: int) -> pd.DataFrame:
     return _apply_by_market_column(frame, lambda series: _ewma_series(series.astype(float), window))
+
+
+def _rolling_zscore_frame(frame: pd.DataFrame, window: int) -> pd.DataFrame:
+    return _apply_by_market_column(frame, lambda series: _rolling_zscore_series_fast(series, window))
 
 
 def _cross_rank_base(frame: pd.DataFrame, descending: bool) -> pd.DataFrame:
@@ -166,18 +203,53 @@ def _cross_percentile_frame(frame: pd.DataFrame, descending: bool) -> pd.DataFra
     return percentile.where(frame.notna())
 
 
+def _gaussian_signed_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    values = frame.astype(float)
+    return values * np.exp(-0.5 * np.square(values))
+
+
+def _reference_aligned(
+    frame: pd.DataFrame,
+    reference_frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    left = frame.astype(float)
+    right = reference_frame.reindex(index=left.index, columns=left.columns).astype(float)
+    mask = left.notna() & right.notna()
+    return left, right, mask
+
+
+def _subtract_reference_frame(frame: pd.DataFrame, reference_frame: pd.DataFrame) -> pd.DataFrame:
+    left, right, mask = _reference_aligned(frame, reference_frame)
+    return left.sub(right).where(mask)
+
+
+def _ratio_to_reference_frame(frame: pd.DataFrame, reference_frame: pd.DataFrame) -> pd.DataFrame:
+    left, right, mask = _reference_aligned(frame, reference_frame)
+    nonzero = right.ne(0.0)
+    return left.div(right.where(nonzero)).where(mask & nonzero)
+
+
 def _bucket_frame(ranks: pd.DataFrame, counts: pd.Series, quantiles: int) -> pd.DataFrame:
     bucket = 1.0 + np.floor((ranks.sub(1.0)).mul(float(quantiles)).div(counts, axis=0))
     return bucket.where(ranks.notna())
 
 
-def _apply_transform(frame: pd.DataFrame, kind: str, params: dict[str, int | float | str]) -> pd.DataFrame:
+def _apply_transform(
+    frame: pd.DataFrame,
+    kind: str,
+    params: dict[str, int | float | str],
+    available_frames: dict[str, pd.DataFrame] | None = None,
+) -> pd.DataFrame:
     if kind not in SUPPORTED_TRANSFORMS:
         raise ValueError(f"Unsupported frame_v2 transform: {kind}")
+    if kind == "abs":
+        return _abs_frame(frame)
     if kind == "rolling_mean":
         return _rolling_mean_frame(frame, int(params["window"]))
     if kind == "rolling_sum":
         return _rolling_sum_frame(frame, int(params["window"]))
+    if kind == "rolling_zscore":
+        return _rolling_zscore_frame(frame, int(params["window"]))
     if kind == "momentum":
         return _momentum_frame(frame, int(params["window"]))
     if kind == "simple_return":
@@ -192,6 +264,18 @@ def _apply_transform(frame: pd.DataFrame, kind: str, params: dict[str, int | flo
         return _cross_rank_frame(frame, bool(params.get("descending", True)))
     if kind == "cross_percentile":
         return _cross_percentile_frame(frame, bool(params.get("descending", True)))
+    if kind == "gaussian_signed":
+        return _gaussian_signed_frame(frame)
+    if kind == "subtract_reference":
+        reference = str(params["reference"])
+        if available_frames is None or reference not in available_frames:
+            raise ValueError(f"Unknown reference frame for subtract_reference: {reference}")
+        return _subtract_reference_frame(frame, available_frames[reference])
+    if kind == "ratio_to_reference":
+        reference = str(params["reference"])
+        if available_frames is None or reference not in available_frames:
+            raise ValueError(f"Unknown reference frame for ratio_to_reference: {reference}")
+        return _ratio_to_reference_frame(frame, available_frames[reference])
     raise ValueError(f"Unsupported frame_v2 transform: {kind}")
 
 

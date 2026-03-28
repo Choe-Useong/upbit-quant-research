@@ -547,7 +547,11 @@ def main() -> None:
             if market_score_payload is not None
             else static_market_score_spec
         )
-        feature_payload = None if shared_feature_frames is not None else _render_value(config["feature_spec_template"], context)
+        feature_payload = (
+            _render_value(config["feature_spec_template"], context)
+            if config.get("feature_spec_template") is not None
+            else None
+        )
 
         if save_run_artifacts and feature_payload is not None:
             (specs_dir / "features.json").write_text(
@@ -569,9 +573,57 @@ def main() -> None:
             required_feature_markets = shared_required_feature_markets
             if shared_feature_frames is not None:
                 feature_frames = dict(shared_feature_frames)
+                if feature_payload is not None:
+                    feature_specs = load_feature_specs_from_payload(feature_payload)
+                    per_run_required_feature_markets = _resolve_required_feature_markets(
+                        feature_specs,
+                        universe_payload,
+                        market_score_spec,
+                    )
+                    if per_run_required_feature_markets is not None:
+                        required_feature_markets = sorted(
+                            set(required_feature_markets or ()) | set(per_run_required_feature_markets)
+                        )
+                    required_columns, uses_market_source = required_source_columns_for_feature_specs(
+                        feature_specs,
+                        SUPPORTED_SOURCE_COLUMNS,
+                    )
+                    source_cache_key = (
+                        tuple(sorted(required_columns or {"trade_price"})),
+                        tuple(required_feature_markets) if required_feature_markets is not None else (),
+                        None if (uses_market_source or required_feature_markets is not None) else max_markets,
+                    )
+                    source_frames = source_frame_cache.get(source_cache_key)
+                    if source_frames is None:
+                        source_frames = read_wide_frames_from_cache(
+                            source_cache_dir,
+                            list(source_cache_key[0]),
+                            market_columns=required_feature_markets,
+                            max_markets=source_cache_key[2],
+                        )
+                        source_frame_cache[source_cache_key] = source_frames
+                    per_run_source_frames = dict(source_frames)
+                    per_run_source_frames.update(feature_frames)
+                    per_run_frames = build_feature_frames_from_cache(
+                        source_cache_dir,
+                        feature_specs,
+                        market_columns=required_feature_markets,
+                        max_markets=None if required_feature_markets is not None else max_markets,
+                        tail_rows=tail_hours,
+                        source_frames=per_run_source_frames,
+                        frame_cache=node_frame_cache,
+                        frame_cache_namespace=(
+                            "grid_v2",
+                            source_cache_key[0],
+                            tuple(required_feature_markets or ()),
+                            tail_hours,
+                        ),
+                    )
+                    feature_frames.update(per_run_frames)
                 if market_score_payload is not None:
                     feature_frames[market_score_spec.output_column] = build_market_score_frame(feature_frames, market_score_spec)
-                result_row["feature_rows"] = shared_feature_rows
+                primary_frame = next(iter(feature_frames.values()))
+                result_row["feature_rows"] = int(primary_frame.notna().sum().sum())
                 result_row["features_source"] = "shared"
             else:
                 feature_specs = load_feature_specs_from_payload(feature_payload)
