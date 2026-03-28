@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from lib.specs import RankFilterSpec, UniverseSpec, ValueFilterSpec
+from lib.specs import FilterStageSpec, RankFilterSpec, UniverseSpec, ValueFilterSpec
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,45 @@ def _compare_frame(operator: str, left: pd.DataFrame, right: float) -> pd.DataFr
 
 
 def _effective_universe_spec(spec: UniverseSpec) -> UniverseSpec:
+    effective_rank_filters = tuple(
+        RankFilterSpec(
+            feature_column=item.feature_column,
+            mode=item.mode,
+            lag=int(item.lag or 0) + int(spec.signal_lag or 0),
+            top_n=item.top_n,
+            quantiles=item.quantiles,
+            bucket_values=item.bucket_values,
+            ascending=item.ascending,
+            scope=item.scope,
+        )
+        for item in spec.rank_filters
+    )
+    effective_filter_stages = tuple(
+        FilterStageSpec(
+            mode=item.mode,
+            filters=tuple(
+                RankFilterSpec(
+                    feature_column=rank_filter.feature_column,
+                    mode=rank_filter.mode,
+                    lag=int(rank_filter.lag or 0) + int(spec.signal_lag or 0),
+                    top_n=rank_filter.top_n,
+                    quantiles=rank_filter.quantiles,
+                    bucket_values=rank_filter.bucket_values,
+                    ascending=rank_filter.ascending,
+                    scope=rank_filter.scope,
+                )
+                for rank_filter in item.filters
+            ),
+        )
+        for item in spec.filter_stages
+    )
+    if not effective_filter_stages and effective_rank_filters:
+        effective_filter_stages = (
+            FilterStageSpec(
+                mode="sequential",
+                filters=effective_rank_filters,
+            ),
+        )
     return UniverseSpec(
         feature_column=spec.feature_column,
         sort_column=spec.sort_column,
@@ -49,6 +88,7 @@ def _effective_universe_spec(spec: UniverseSpec) -> UniverseSpec:
         quantiles=spec.quantiles,
         bucket_values=spec.bucket_values,
         ascending=spec.ascending,
+        scope=spec.scope,
         exclude_warnings=spec.exclude_warnings,
         min_age_days=spec.min_age_days,
         allowed_markets=spec.allowed_markets,
@@ -62,18 +102,8 @@ def _effective_universe_spec(spec: UniverseSpec) -> UniverseSpec:
             )
             for item in spec.value_filters
         ),
-        rank_filters=tuple(
-            RankFilterSpec(
-                feature_column=item.feature_column,
-                mode=item.mode,
-                lag=int(item.lag or 0) + int(spec.signal_lag or 0),
-                top_n=item.top_n,
-                quantiles=item.quantiles,
-                bucket_values=item.bucket_values,
-                ascending=item.ascending,
-            )
-            for item in spec.rank_filters
-        ),
+        rank_filters=effective_rank_filters,
+        filter_stages=effective_filter_stages,
         name=spec.name,
     )
 
@@ -99,35 +129,81 @@ def _allowed_market_mask(columns: pd.Index, spec: UniverseSpec) -> pd.Series:
 
 def _apply_rank_filter(
     candidates: pd.DataFrame,
+    base: pd.DataFrame,
     feature_frame: pd.DataFrame,
     rank_filter: RankFilterSpec,
 ) -> pd.DataFrame:
     values = _shift_frame(feature_frame, rank_filter.lag)
-    scoped = values.where(candidates)
+    scope = (rank_filter.scope or "filtered").lower()
+    if scope in {"filtered", "candidates"}:
+        scoped = values.where(candidates)
+    elif scope in {"global", "base"}:
+        scoped = values.where(base)
+    else:
+        raise ValueError(f"Unsupported rank filter scope: {rank_filter.scope}")
     ranks = scoped.rank(axis=1, method="first", ascending=rank_filter.ascending)
     if rank_filter.mode == "top_n":
-        return ranks.le(float(rank_filter.top_n)).fillna(False)
+        selected = ranks.le(float(rank_filter.top_n)).fillna(False)
+        return candidates & selected
     if rank_filter.mode == "quantile":
         counts = scoped.notna().sum(axis=1).astype(float)
         bucket = 1.0 + np.floor((ranks.sub(1.0)).mul(float(rank_filter.quantiles)).div(counts, axis=0))
-        return bucket.isin([float(value) for value in rank_filter.bucket_values]).fillna(False)
+        selected = bucket.isin([float(value) for value in rank_filter.bucket_values]).fillna(False)
+        return candidates & selected
     raise ValueError(f"Unsupported rank filter mode: {rank_filter.mode}")
 
 
 def _apply_final_selection(
     candidates: pd.DataFrame,
+    base: pd.DataFrame,
     sort_frame: pd.DataFrame,
     spec: UniverseSpec,
 ) -> pd.DataFrame:
-    scoped = sort_frame.where(candidates)
+    if spec.mode == "all":
+        return candidates
+    scope = (spec.scope or "filtered").lower()
+    if scope in {"filtered", "candidates"}:
+        scoped = sort_frame.where(candidates)
+    elif scope in {"global", "base"}:
+        scoped = sort_frame.where(base)
+    else:
+        raise ValueError(f"Unsupported universe scope: {spec.scope}")
     ranks = scoped.rank(axis=1, method="first", ascending=spec.ascending)
     if spec.mode == "top_n":
-        return ranks.le(float(spec.top_n)).fillna(False)
+        selected = ranks.le(float(spec.top_n)).fillna(False)
+        return candidates & selected
     if spec.mode == "quantile":
         counts = scoped.notna().sum(axis=1).astype(float)
         bucket = 1.0 + np.floor((ranks.sub(1.0)).mul(float(spec.quantiles)).div(counts, axis=0))
-        return bucket.isin([float(value) for value in spec.bucket_values]).fillna(False)
+        selected = bucket.isin([float(value) for value in spec.bucket_values]).fillna(False)
+        return candidates & selected
     raise ValueError(f"Unsupported universe mode: {spec.mode}")
+
+
+def _apply_filter_stage(
+    candidates: pd.DataFrame,
+    base: pd.DataFrame,
+    feature_frames: dict[str, pd.DataFrame],
+    stage: FilterStageSpec,
+) -> pd.DataFrame:
+    mode = (stage.mode or "sequential").lower()
+    if mode == "sequential":
+        result = candidates
+        for rank_filter in stage.filters:
+            if rank_filter.feature_column not in feature_frames:
+                raise ValueError(f"Missing rank filter feature for frame_v2 universe: {rank_filter.feature_column}")
+            result = _apply_rank_filter(result, base, feature_frames[rank_filter.feature_column], rank_filter)
+        return result
+    if mode == "and":
+        frozen = candidates.copy()
+        result = frozen.copy()
+        for rank_filter in stage.filters:
+            if rank_filter.feature_column not in feature_frames:
+                raise ValueError(f"Missing rank filter feature for frame_v2 universe: {rank_filter.feature_column}")
+            selected = _apply_rank_filter(frozen, base, feature_frames[rank_filter.feature_column], rank_filter)
+            result &= selected
+        return result
+    raise ValueError(f"Unsupported filter stage mode: {stage.mode}")
 
 
 def build_universe_mask_v2(
@@ -174,10 +250,8 @@ def build_universe_mask_v2(
         value_frame = _shift_frame(feature_frames[value_filter.feature_column], value_filter.lag)
         candidates &= _compare_frame(value_filter.operator, value_frame, float(value_filter.value)).fillna(False)
 
-    for rank_filter in effective_spec.rank_filters:
-        if rank_filter.feature_column not in feature_frames:
-            raise ValueError(f"Missing rank filter feature for frame_v2 universe: {rank_filter.feature_column}")
-        candidates = _apply_rank_filter(candidates, feature_frames[rank_filter.feature_column], rank_filter)
+    for stage in effective_spec.filter_stages:
+        candidates = _apply_filter_stage(candidates, base, feature_frames, stage)
 
-    selection = _apply_final_selection(candidates, sort_frame, effective_spec)
+    selection = _apply_final_selection(candidates, base, sort_frame, effective_spec)
     return UniverseV2Result(selection_mask=selection, base_eligible_mask=base)

@@ -1,0 +1,116 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turnrank180d_q3_gaussq3_240m_fee5bp",
+  "run_name_template": "upbit_240m_turnrankq{turn_rank_bucket}_gaussq{gaussian_bucket}_retw{ret_window}_zw{z_window}_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    },
+    {
+      "source": "candle_acc_trade_price",
+      "steps": [
+        {
+          "kind": "cross_percentile",
+          "params": {
+            "descending": false
+          }
+        },
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 1080
+          }
+        }
+      ],
+      "column_name": "turn_rank_1bar_180d_avg"
+    }
+  ],
+  "feature_spec_template": [
+    {
+      "preset": "gaussian_momentum",
+      "params": {
+        "ret_window": "{ret_window}",
+        "z_window": "{z_window}"
+      },
+      "column_name": "gauss_{ret_window}_{z_window}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "gauss_{ret_window}_{z_window}",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "quantile",
+    "quantiles": 3,
+    "bucket_values": [
+      "{gaussian_bucket}"
+    ],
+    "ascending": false,
+    "scope": "global",
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "rank_filters": [
+      {
+        "feature_column": "turn_rank_1bar_180d_avg",
+        "mode": "quantile",
+        "lag": 0,
+        "quantiles": 3,
+        "bucket_values": [
+          "{turn_rank_bucket}"
+        ],
+        "ascending": false,
+        "scope": "global"
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "turn_rank_bucket": [
+      1,
+      2,
+      3
+    ],
+    "gaussian_bucket": [
+      1,
+      2,
+      3
+    ],
+    "ret_window": [
+      18,
+      42,
+      84,
+      168
+    ],
+    "z_window": [
+      168,
+      336
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  }
+}

@@ -120,6 +120,13 @@ class RankFilterSpec:
     quantiles: int = 5
     bucket_values: tuple[int, ...] = (1,)
     ascending: bool = False
+    scope: str = "filtered"
+
+
+@dataclass(frozen=True)
+class FilterStageSpec:
+    mode: str = "sequential"
+    filters: tuple[RankFilterSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -134,12 +141,14 @@ class UniverseSpec:
     quantiles: int = 5
     bucket_values: tuple[int, ...] = (1,)
     ascending: bool = False
+    scope: str = "filtered"
     exclude_warnings: bool = False
     min_age_days: int | None = None
     allowed_markets: tuple[str, ...] = ()
     excluded_markets: tuple[str, ...] = ()
     value_filters: tuple[ValueFilterSpec, ...] = ()
     rank_filters: tuple[RankFilterSpec, ...] = ()
+    filter_stages: tuple[FilterStageSpec, ...] = ()
     name: str | None = None
 
     def resolved_name(self) -> str:
@@ -154,6 +163,8 @@ class UniverseSpec:
         if self.mode == "top_n":
             order = "asc" if self.ascending else "desc"
             return f"{sort_column}_{lag_part}_{order}_top{self.top_n}"
+        if self.mode == "all":
+            return f"{sort_column}_{lag_part}_all"
         order = "asc" if self.ascending else "desc"
         buckets = "-".join(str(value) for value in self.bucket_values)
         return f"{sort_column}_{lag_part}_{order}_q{self.quantiles}_b{buckets}"

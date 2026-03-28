@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import copy
 import json
+from functools import lru_cache
 from pathlib import Path
 
 from lib.specs import (
     CompareSpec,
     FeatureSpec,
+    FilterStageSpec,
     LogicalSpec,
     MarketScoreComponentSpec,
     MarketScoreRuleSpec,
@@ -20,9 +23,64 @@ from lib.specs import (
 )
 
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_FEATURE_PRESET_PATH = ROOT_DIR / "configs" / "presets" / "features_v2_presets.json"
+
+
+def _render_template_value(template, context: dict[str, object]):
+    if isinstance(template, dict):
+        return {key: _render_template_value(value, context) for key, value in template.items()}
+    if isinstance(template, list):
+        return [_render_template_value(value, context) for value in template]
+    if isinstance(template, str):
+        if template.startswith("{") and template.endswith("}") and template.count("{") == 1 and template.count("}") == 1:
+            key = template[1:-1]
+            if key in context:
+                return context[key]
+        return template.format(**context)
+    return template
+
+
+@lru_cache(maxsize=1)
+def _load_feature_preset_catalog() -> dict[str, dict]:
+    if not DEFAULT_FEATURE_PRESET_PATH.exists():
+        return {}
+    payload = json.loads(DEFAULT_FEATURE_PRESET_PATH.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, dict):
+        raise ValueError("Feature preset catalog must be a JSON object")
+    return payload
+
+
+def _expand_feature_preset_item(item: dict) -> dict:
+    preset_name = item.get("preset")
+    if not preset_name:
+        return item
+    catalog = _load_feature_preset_catalog()
+    if preset_name not in catalog:
+        raise ValueError(f"Unknown feature preset: {preset_name}")
+    preset_template = copy.deepcopy(catalog[preset_name])
+    params = item.get("params", {})
+    if not isinstance(params, dict):
+        raise ValueError(f"Feature preset params must be an object: {preset_name}")
+    expanded = _render_template_value(preset_template, params)
+    if not isinstance(expanded, dict):
+        raise ValueError(f"Expanded feature preset must be an object: {preset_name}")
+    result = dict(expanded)
+    if "default_column_name" in result and "column_name" not in item:
+        result["column_name"] = result.pop("default_column_name")
+    else:
+        result.pop("default_column_name", None)
+    for key, value in item.items():
+        if key in {"preset", "params"}:
+            continue
+        result[key] = value
+    return result
+
+
 def load_feature_specs_from_payload(payload: list[dict]) -> list[FeatureSpec]:
     specs: list[FeatureSpec] = []
-    for item in payload:
+    for raw_item in payload:
+        item = _expand_feature_preset_item(raw_item)
         steps = tuple(
             TransformSpec(kind=step["kind"], params=step.get("params", {}))
             for step in item.get("steps", [])
@@ -82,6 +140,18 @@ def load_feature_specs(path: Path) -> list[FeatureSpec]:
 
 
 def load_universe_spec_from_payload(payload: dict) -> UniverseSpec:
+    def _load_rank_filter_spec(item: dict) -> RankFilterSpec:
+        return RankFilterSpec(
+            feature_column=item["feature_column"],
+            mode=item.get("mode", "top_n"),
+            lag=item.get("lag", 0),
+            top_n=item.get("top_n", 30),
+            quantiles=item.get("quantiles", 5),
+            bucket_values=tuple(item.get("bucket_values", [1])),
+            ascending=item.get("ascending", False),
+            scope=item.get("scope", "filtered"),
+        )
+
     return UniverseSpec(
         feature_column=payload["feature_column"],
         sort_column=payload.get("sort_column"),
@@ -93,6 +163,7 @@ def load_universe_spec_from_payload(payload: dict) -> UniverseSpec:
         quantiles=payload.get("quantiles", 5),
         bucket_values=tuple(payload.get("bucket_values", [1])),
         ascending=payload.get("ascending", False),
+        scope=payload.get("scope", "filtered"),
         exclude_warnings=payload.get("exclude_warnings", False),
         min_age_days=payload.get("min_age_days"),
         allowed_markets=tuple(payload.get("allowed_markets", [])),
@@ -106,17 +177,13 @@ def load_universe_spec_from_payload(payload: dict) -> UniverseSpec:
             )
             for item in payload.get("value_filters", [])
         ),
-        rank_filters=tuple(
-            RankFilterSpec(
-                feature_column=item["feature_column"],
-                mode=item.get("mode", "top_n"),
-                lag=item.get("lag", 0),
-                top_n=item.get("top_n", 30),
-                quantiles=item.get("quantiles", 5),
-                bucket_values=tuple(item.get("bucket_values", [1])),
-                ascending=item.get("ascending", False),
+        rank_filters=tuple(_load_rank_filter_spec(item) for item in payload.get("rank_filters", [])),
+        filter_stages=tuple(
+            FilterStageSpec(
+                mode=item.get("mode", "sequential"),
+                filters=tuple(_load_rank_filter_spec(filter_item) for filter_item in item.get("filters", [])),
             )
-            for item in payload.get("rank_filters", [])
+            for item in payload.get("filter_stages", [])
         ),
         name=payload.get("name"),
     )

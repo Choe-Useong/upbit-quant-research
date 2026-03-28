@@ -1,0 +1,110 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turnrank180d_rankbands_240m_fee5bp",
+  "run_name_template": "upbit_240m_turnrank180d_r{rank_low}_{rank_high}_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    },
+    {
+      "source": "candle_acc_trade_price",
+      "steps": [
+        {
+          "kind": "cross_percentile",
+          "params": {
+            "descending": false
+          }
+        },
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 1080
+          }
+        }
+      ],
+      "column_name": "turn_rank_1bar_180d_avg"
+    },
+    {
+      "source": "turn_rank_1bar_180d_avg",
+      "steps": [
+        {
+          "kind": "cross_rank",
+          "params": {
+            "descending": true
+          }
+        }
+      ],
+      "column_name": "turn_rank_1bar_180d_avg_rank"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "turn_rank_1bar_180d_avg",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "top_n",
+    "top_n": 10000,
+    "ascending": false,
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "value_filters": [
+      {
+        "feature_column": "turn_rank_1bar_180d_avg_rank",
+        "operator": "ge",
+        "value": "{rank_low}"
+      },
+      {
+        "feature_column": "turn_rank_1bar_180d_avg_rank",
+        "operator": "le",
+        "value": "{rank_high}"
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "rank_low": [
+      1,
+      11,
+      21,
+      31,
+      41
+    ],
+    "rank_high": [
+      10,
+      20,
+      30,
+      40,
+      9999
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  },
+  "constraints": [
+    "(rank_low, rank_high) in [(1, 10), (11, 20), (21, 30), (31, 40), (41, 9999)]"
+  ]
+}
