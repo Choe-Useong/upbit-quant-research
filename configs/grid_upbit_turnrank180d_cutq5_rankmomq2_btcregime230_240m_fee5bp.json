@@ -1,0 +1,146 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turnrank180d_cutq5_rankmomq2_btcregime230_240m_fee5bp",
+  "run_name_template": "upbit_240m_turncutq5_rankmomq{rank_momentum_bucket}_momw{momentum_window}_avgw{rank_avg_window}_btcreg230_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    },
+    {
+      "preset": "turnover_rank_persist",
+      "params": {
+        "avg_window": 1080
+      },
+      "column_name": "turn_rank_1bar_180d_avg"
+    },
+    {
+      "source": "market:KRW-BTC:trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 2
+          }
+        }
+      ],
+      "column_name": "btc_sma_2"
+    },
+    {
+      "source": "market:KRW-BTC:trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": 30
+          }
+        }
+      ],
+      "column_name": "btc_sma_30"
+    },
+    {
+      "compare": {
+        "left_feature": "btc_sma_2",
+        "operator": "gt",
+        "right_feature": "btc_sma_30"
+      },
+      "column_name": "btc_regime_2_30"
+    }
+  ],
+  "feature_spec_template": [
+    {
+      "preset": "rank_momentum",
+      "params": {
+        "momentum_window": "{momentum_window}",
+        "rank_avg_window": "{rank_avg_window}"
+      },
+      "column_name": "rank_mom_{momentum_window}_{rank_avg_window}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "rank_mom_{momentum_window}_{rank_avg_window}",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "quantile",
+    "quantiles": 2,
+    "bucket_values": [
+      "{rank_momentum_bucket}"
+    ],
+    "ascending": false,
+    "scope": "filtered",
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "value_filters": [
+      {
+        "feature_column": "btc_regime_2_30",
+        "operator": "gt",
+        "value": 0
+      }
+    ],
+    "filter_stages": [
+      {
+        "mode": "sequential",
+        "filters": [
+          {
+            "feature_column": "turn_rank_1bar_180d_avg",
+            "mode": "quantile",
+            "lag": 0,
+            "quantiles": 5,
+            "bucket_values": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "ascending": false,
+            "scope": "filtered"
+          }
+        ]
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "rank_momentum_bucket": [
+      1,
+      2
+    ],
+    "momentum_window": [
+      18,
+      42,
+      84,
+      168
+    ],
+    "rank_avg_window": [
+      18,
+      42
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  }
+}

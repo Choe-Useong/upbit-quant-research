@@ -1,0 +1,153 @@
+{
+  "candle_dir": "data/upbit_research/minutes/240",
+  "source_cache_dir": "data/upbit_research_cache/240",
+  "out_dir": "data/grid/upbit_turnrank180d_cutq5_turnq3_selfma_240m_fee5bp",
+  "run_name_template": "upbit_240m_turncutq5_turnq{turnover_bucket}_selfma{short}_{long}_{rebalance_frequency}_age{min_age_days}_fee5bp",
+  "compute_rolling_ir": false,
+  "print_run_summaries": false,
+  "save_run_artifacts": false,
+  "shared_feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "age_days"
+        }
+      ],
+      "column_name": "age_days"
+    },
+    {
+      "preset": "turnover_rank_persist",
+      "params": {
+        "avg_window": 1080
+      },
+      "column_name": "turn_rank_1bar_180d_avg"
+    }
+  ],
+  "feature_spec_template": [
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{short}"
+          }
+        }
+      ],
+      "column_name": "sma_{short}"
+    },
+    {
+      "source": "trade_price",
+      "steps": [
+        {
+          "kind": "rolling_mean",
+          "params": {
+            "window": "{long}"
+          }
+        }
+      ],
+      "column_name": "sma_{long}"
+    },
+    {
+      "compare": {
+        "left_feature": "sma_{short}",
+        "operator": "gt",
+        "right_feature": "sma_{long}"
+      },
+      "column_name": "self_ma_{short}_{long}"
+    }
+  ],
+  "universe_spec_template": {
+    "name": "{run_name}",
+    "feature_column": "turn_rank_1bar_180d_avg",
+    "lag": 0,
+    "signal_lag": 1,
+    "start_min_cross_section_size": 50,
+    "mode": "all",
+    "scope": "filtered",
+    "exclude_warnings": true,
+    "min_age_days": "{min_age_days}",
+    "value_filters": [
+      {
+        "feature_column": "self_ma_{short}_{long}",
+        "operator": "gt",
+        "value": 0
+      }
+    ],
+    "filter_stages": [
+      {
+        "mode": "sequential",
+        "filters": [
+          {
+            "feature_column": "turn_rank_1bar_180d_avg",
+            "mode": "quantile",
+            "lag": 0,
+            "quantiles": 5,
+            "bucket_values": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "ascending": false,
+            "scope": "filtered"
+          },
+          {
+            "feature_column": "turn_rank_1bar_180d_avg",
+            "mode": "quantile",
+            "lag": 0,
+            "quantiles": 3,
+            "bucket_values": [
+              "{turnover_bucket}"
+            ],
+            "ascending": false,
+            "scope": "filtered"
+          }
+        ]
+      }
+    ]
+  },
+  "weight_spec_template": {
+    "weighting": "equal",
+    "gross_exposure": 1.0,
+    "rebalance_frequency": "{rebalance_frequency}",
+    "universe_name": "{run_name}"
+  },
+  "vectorbt_spec_template": {
+    "fees": 0.0005,
+    "slippage": 0.0,
+    "benchmark_market": "KRW-BTC"
+  },
+  "grid": {
+    "turnover_bucket": [
+      1,
+      2,
+      3
+    ],
+    "short": [
+      1,
+      2,
+      3,
+      4,
+      7
+    ],
+    "long": [
+      20,
+      30,
+      40,
+      50,
+      80,
+      120
+    ],
+    "rebalance_frequency": [
+      "every_bar"
+    ],
+    "min_age_days": [
+      180
+    ]
+  },
+  "constraints": [
+    "short < long"
+  ]
+}

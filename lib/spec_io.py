@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from lib.specs import (
+    BreadthSpec,
     CompareSpec,
     FeatureSpec,
     FilterStageSpec,
@@ -119,6 +120,18 @@ def load_feature_specs_from_payload(payload: list[dict]) -> list[FeatureSpec]:
                 entry_feature=state_payload["entry_feature"],
                 exit_feature=state_payload["exit_feature"],
             )
+        breadth = None
+        if "breadth" in item:
+            breadth_payload = item["breadth"]
+            breadth = BreadthSpec(
+                driver_feature=breadth_payload["driver_feature"],
+                signal_feature=breadth_payload["signal_feature"],
+                mode=breadth_payload.get("mode", "top_n"),
+                top_n=int(breadth_payload.get("top_n", 4)),
+                quantiles=int(breadth_payload.get("quantiles", 4)),
+                bucket_values=tuple(int(value) for value in breadth_payload.get("bucket_values", [1])),
+                ascending=bool(breadth_payload.get("ascending", False)),
+            )
         specs.append(
             FeatureSpec(
                 source=item.get("source"),
@@ -128,6 +141,7 @@ def load_feature_specs_from_payload(payload: list[dict]) -> list[FeatureSpec]:
                 compare=compare,
                 logical=logical,
                 state=state,
+                breadth=breadth,
                 column_name=item.get("column_name"),
             )
         )
@@ -198,6 +212,10 @@ def load_weight_spec_from_payload(payload: dict) -> WeightSpec:
     return WeightSpec(
         weighting=payload.get("weighting", "equal"),
         gross_exposure=payload.get("gross_exposure", 1.0),
+        gross_exposure_feature=payload.get("gross_exposure_feature"),
+        gross_exposure_lag=payload.get("gross_exposure_lag", 0),
+        gross_exposure_clip_min=payload.get("gross_exposure_clip_min", 0.0),
+        gross_exposure_clip_max=payload.get("gross_exposure_clip_max", 1.0),
         fixed_weight=payload.get("fixed_weight"),
         rank_power=payload.get("rank_power", 1.0),
         max_positions=payload.get("max_positions"),

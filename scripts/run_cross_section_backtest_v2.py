@@ -92,15 +92,16 @@ def _write_wide_frame(path: Path, frame: pd.DataFrame) -> None:
 
 
 def _resolve_required_feature_markets(feature_specs, universe_spec, market_score_spec=None) -> list[str] | None:
-    markets: set[str] = set()
+    explicit_markets: set[str] = set()
     if universe_spec.allowed_markets:
-        markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+        explicit_markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+    referenced_markets: set[str] = set()
     if market_score_spec is not None:
-        markets.update(required_markets_for_market_score_spec(market_score_spec))
-    markets.update(referenced_markets_for_feature_specs(feature_specs))
-    if not markets:
-        return None
-    return sorted(markets)
+        referenced_markets.update(required_markets_for_market_score_spec(market_score_spec))
+    referenced_markets.update(referenced_markets_for_feature_specs(feature_specs))
+    if explicit_markets:
+        return sorted(explicit_markets | referenced_markets)
+    return None
 
 
 def _read_warning_frame(
@@ -158,7 +159,7 @@ def main() -> None:
     warning_frame = warning_frame.reindex(index=reference_index)
 
     universe_result = build_universe_mask_v2(feature_frames, warning_frame, universe_spec)
-    weight_frame = build_weight_frame_v2(universe_result.selection_mask, weight_spec)
+    weight_frame = build_weight_frame_v2(universe_result.selection_mask, weight_spec, feature_frames)
 
     if args.save_weights_parquet:
         weights_path = portfolio_dir / "weights_v2.parquet"

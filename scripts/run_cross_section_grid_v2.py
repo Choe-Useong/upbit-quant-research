@@ -131,21 +131,84 @@ def _selection_stats(weight_frame: pd.DataFrame) -> dict[str, float | int]:
     }
 
 
+def _attach_plateau_air_mean(
+    result_frame: pd.DataFrame,
+    grid_config: dict[str, list[Any]],
+) -> pd.DataFrame:
+    if result_frame.empty:
+        return result_frame
+    if "Annualized Information Ratio" not in result_frame.columns:
+        return result_frame
+
+    grid_axes = [key for key in grid_config.keys() if key in result_frame.columns]
+    if not grid_axes:
+        return result_frame
+
+    numeric_axes: list[str] = []
+    categorical_axes: list[str] = []
+    axis_index: dict[str, dict[Any, int]] = {}
+    for axis in grid_axes:
+        values = list(grid_config.get(axis, []))
+        if not values:
+            continue
+        if all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in values):
+            numeric_axes.append(axis)
+            axis_index[axis] = {value: idx for idx, value in enumerate(values)}
+        else:
+            categorical_axes.append(axis)
+
+    if not numeric_axes:
+        return result_frame
+
+    frame = result_frame.copy()
+    frame["Plateau AIR Mean"] = float("nan")
+
+    group_cols = ["status"] if "status" in frame.columns else []
+    group_cols.extend(categorical_axes)
+    grouped = frame.groupby(group_cols, dropna=False) if group_cols else [(None, frame)]
+
+    for _, group in grouped:
+        ok_group = group[group["status"] == "ok"].copy() if "status" in group.columns else group.copy()
+        if ok_group.empty:
+            continue
+        indexed_positions = {
+            axis: ok_group[axis].map(axis_index[axis])
+            for axis in numeric_axes
+        }
+        for idx, row in ok_group.iterrows():
+            keep = ok_group.index != idx
+            for axis in numeric_axes:
+                row_pos = axis_index[axis].get(row[axis])
+                if row_pos is None:
+                    keep &= False
+                    continue
+                keep &= indexed_positions[axis].sub(row_pos).abs().le(1)
+            neighbors = ok_group[keep]
+            if neighbors.empty:
+                continue
+            frame.loc[idx, "Plateau AIR Mean"] = pd.to_numeric(
+                neighbors["Annualized Information Ratio"],
+                errors="coerce",
+            ).mean()
+    return frame
+
+
 def _resolve_required_feature_markets(
     feature_specs,
     universe_payload: dict[str, Any],
     market_score_spec=None,
 ) -> list[str] | None:
     universe_spec = load_universe_spec_from_payload(universe_payload)
-    markets: set[str] = set()
+    explicit_markets: set[str] = set()
     if universe_spec.allowed_markets:
-        markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+        explicit_markets.update(str(market).upper() for market in universe_spec.allowed_markets)
+    referenced_markets: set[str] = set()
     if market_score_spec is not None:
-        markets.update(required_markets_for_market_score_spec(market_score_spec))
-    markets.update(referenced_markets_for_feature_specs(feature_specs))
-    if not markets:
-        return None
-    return sorted(markets)
+        referenced_markets.update(required_markets_for_market_score_spec(market_score_spec))
+    referenced_markets.update(referenced_markets_for_feature_specs(feature_specs))
+    if explicit_markets:
+        return sorted(explicit_markets | referenced_markets)
+    return None
 
 
 def _read_warning_frame(
@@ -283,7 +346,7 @@ def _run_v2_backtest(
     warning_frame = warning_frame.reindex(index=reference_index)
 
     universe_result = build_universe_mask_v2(feature_frames, warning_frame, universe_spec)
-    weight_frame = build_weight_frame_v2(universe_result.selection_mask, weight_spec)
+    weight_frame = build_weight_frame_v2(universe_result.selection_mask, weight_spec, feature_frames)
 
     price_column = str(vectorbt_payload.get("price_column", "trade_price"))
     init_cash = float(vectorbt_payload.get("init_cash", 1_000_000.0))
@@ -722,15 +785,14 @@ def main() -> None:
             print(f"[{run_index}/{total_runs}] error: {run_name} :: {exc}")
         results.append(result_row)
 
-        columns: list[str] = []
-        for row in results:
-            for key in row.keys():
-                if key not in columns:
-                    columns.append(key)
+        result_frame = pd.DataFrame(results)
+        result_frame = _attach_plateau_air_mean(result_frame, config.get("grid", {}))
+        rows_to_write = result_frame.to_dict(orient="records")
+        columns = list(result_frame.columns)
         with (out_dir / "summary_results.csv").open("w", encoding="utf-8-sig", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=columns)
             writer.writeheader()
-            writer.writerows(results)
+            writer.writerows(rows_to_write)
 
     print(f"Wrote {len(results)} grid result rows to {out_dir / 'summary_results.csv'}")
 

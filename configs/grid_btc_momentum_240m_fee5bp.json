@@ -1,8 +1,8 @@
 {
   "candle_dir": "data/upbit_research/minutes/240",
   "source_cache_dir": "data/upbit_research_cache/240",
-  "out_dir": "data/grid/btc_ma_cross_240m_fee5bp",
-  "run_name_template": "btc_ma_240m_{short}_{long}_{rebalance_frequency}_fee5bp",
+  "out_dir": "data/grid/btc_momentum_240m_fee5bp",
+  "run_name_template": "btc_mom_240m_{momentum_window}_{rebalance_frequency}_fee5bp",
   "compute_rolling_ir": false,
   "print_run_summaries": false,
   "save_run_artifacts": false,
@@ -11,47 +11,22 @@
       "source": "trade_price",
       "steps": [
         {
-          "kind": "rolling_mean",
+          "kind": "momentum",
           "params": {
-            "window": "{short}"
+            "window": "{momentum_window}"
           }
         }
       ],
-      "column_name": "sma_{short}"
-    },
-    {
-      "source": "trade_price",
-      "steps": [
-        {
-          "kind": "rolling_mean",
-          "params": {
-            "window": "{long}"
-          }
-        }
-      ],
-      "column_name": "sma_{long}"
-    },
-    {
-      "compare": {
-        "left_feature": "sma_{short}",
-        "operator": "gt",
-        "right_feature": "sma_{long}"
-      },
-      "column_name": "sma_{short}_gt_sma_{long}"
+      "column_name": "mom_{momentum_window}"
     }
   ],
   "universe_spec_template": {
     "name": "{run_name}",
-    "feature_column": "sma_{short}_gt_sma_{long}",
+    "feature_column": "mom_{momentum_window}",
     "lag": 0,
     "signal_lag": 1,
     "start_min_cross_section_size": 1,
-    "mode": "quantile",
-    "quantiles": 1,
-    "bucket_values": [
-      1
-    ],
-    "ascending": false,
+    "mode": "all",
     "scope": "filtered",
     "exclude_warnings": true,
     "min_age_days": 180,
@@ -60,7 +35,7 @@
     ],
     "value_filters": [
       {
-        "feature_column": "sma_{short}_gt_sma_{long}",
+        "feature_column": "mom_{momentum_window}",
         "operator": "gt",
         "value": 0
       }
@@ -78,26 +53,22 @@
     "benchmark_market": "KRW-BTC"
   },
   "grid": {
-    "short": [
+    "momentum_window": [
       1,
       2,
       3,
       4,
-      7
-    ],
-    "long": [
+      7,
       20,
       30,
       40,
       50,
       80,
-      120
+      120,
+      168
     ],
     "rebalance_frequency": [
       "every_bar"
     ]
-  },
-  "constraints": [
-    "short < long"
-  ]
+  }
 }

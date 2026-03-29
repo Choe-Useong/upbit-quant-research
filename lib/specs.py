@@ -61,6 +61,17 @@ class StateSpec:
 
 
 @dataclass(frozen=True)
+class BreadthSpec:
+    driver_feature: str
+    signal_feature: str
+    mode: str = "top_n"
+    top_n: int = 4
+    quantiles: int = 4
+    bucket_values: tuple[int, ...] = (1,)
+    ascending: bool = False
+
+
+@dataclass(frozen=True)
 class FeatureSpec:
     source: str | None = None
     steps: tuple[TransformSpec, ...] = ()
@@ -69,6 +80,7 @@ class FeatureSpec:
     compare: CompareSpec | None = None
     logical: LogicalSpec | None = None
     state: StateSpec | None = None
+    breadth: BreadthSpec | None = None
     column_name: str | None = None
 
     def resolved_column_name(self) -> str:
@@ -86,6 +98,19 @@ class FeatureSpec:
             return f"{self.logical.operator}__{joined}"
         if self.state is not None:
             return f"hold__{self.state.entry_feature}__until__{self.state.exit_feature}"
+        if self.breadth is not None:
+            if self.breadth.mode == "top_n":
+                order = "asc" if self.breadth.ascending else "desc"
+                return (
+                    f"breadth__{self.breadth.driver_feature}__top{self.breadth.top_n}_{order}"
+                    f"__{self.breadth.signal_feature}"
+                )
+            buckets = "-".join(str(value) for value in self.breadth.bucket_values)
+            order = "asc" if self.breadth.ascending else "desc"
+            return (
+                f"breadth__{self.breadth.driver_feature}__q{self.breadth.quantiles}_b{buckets}_{order}"
+                f"__{self.breadth.signal_feature}"
+            )
         if self.components:
             suffix = "__".join(
                 f"{component.feature_column}_w{component.weight:g}"
@@ -95,7 +120,7 @@ class FeatureSpec:
             return f"{prefix}__{suffix}"
         if not self.steps:
             if self.source is None:
-                raise ValueError("FeatureSpec must define source, components, compare, logical, or state")
+                raise ValueError("FeatureSpec must define source, components, compare, logical, state, or breadth")
             return self.source
         suffix = "__".join(step.resolved_name() for step in self.steps)
         if self.source is None:
@@ -174,6 +199,10 @@ class UniverseSpec:
 class WeightSpec:
     weighting: str = "equal"
     gross_exposure: float = 1.0
+    gross_exposure_feature: str | None = None
+    gross_exposure_lag: int = 0
+    gross_exposure_clip_min: float = 0.0
+    gross_exposure_clip_max: float = 1.0
     fixed_weight: float | None = None
     rank_power: float = 1.0
     max_positions: int | None = None
@@ -190,15 +219,32 @@ class WeightSpec:
 
     def resolved_name(self) -> str:
         prefix = self.universe_name or "universe"
+        exposure_suffix = ""
+        if self.gross_exposure_feature:
+            feature_token = (
+                str(self.gross_exposure_feature)
+                .replace(":", "_")
+                .replace("/", "_")
+                .replace("\\", "_")
+                .replace("{", "")
+                .replace("}", "")
+            )
+            exposure_suffix = (
+                f"_gfeat{feature_token}"
+                f"_lag{self.gross_exposure_lag}"
+                f"_clip{self.gross_exposure_clip_min:g}_{self.gross_exposure_clip_max:g}"
+            )
         if self.weighting == "equal":
             return (
                 f"{prefix}__equal_{self.rebalance_frequency}"
                 f"_gross{self.gross_exposure:g}"
+                f"{exposure_suffix}"
             )
         if self.weighting == "feature_value":
             return (
                 f"{prefix}__feature_value_{self.rebalance_frequency}"
                 f"_gross{self.gross_exposure:g}"
+                f"{exposure_suffix}"
             )
         if self.weighting == "fixed":
             if self.fixed_weight is None:
@@ -206,6 +252,7 @@ class WeightSpec:
             return (
                 f"{prefix}__fixed_{self.rebalance_frequency}"
                 f"_w{self.fixed_weight:g}"
+                f"{exposure_suffix}"
             )
         if self.weighting == "incremental_signal":
             step_up = self.incremental_step_up if self.incremental_step_up is not None else self.incremental_step_size
@@ -214,8 +261,10 @@ class WeightSpec:
                 f"{prefix}__incremental_signal_{self.rebalance_frequency}"
                 f"_up{step_up:g}_down{step_down:g}"
                 f"_gross{self.gross_exposure:g}"
+                f"{exposure_suffix}"
             )
         return (
             f"{prefix}__rank_p{self.rank_power:g}_{self.rebalance_frequency}"
             f"_gross{self.gross_exposure:g}"
+            f"{exposure_suffix}"
         )

@@ -101,6 +101,58 @@ def _holding_state_frame(entry_frame: pd.DataFrame, exit_frame: pd.DataFrame) ->
     return result
 
 
+def _breadth_frame(
+    driver_frame: pd.DataFrame,
+    signal_frame: pd.DataFrame,
+    *,
+    mode: str,
+    top_n: int,
+    quantiles: int,
+    bucket_values: tuple[int, ...],
+    ascending: bool,
+) -> pd.DataFrame:
+    driver = driver_frame.astype(float)
+    signal = signal_frame.astype(float).reindex(index=driver.index, columns=driver.columns)
+    result = pd.DataFrame(np.nan, index=driver.index, columns=driver.columns, dtype=float)
+
+    for timestamp in driver.index:
+        row_driver = driver.loc[timestamp]
+        row_signal = signal.loc[timestamp]
+        valid_mask = row_driver.notna() & row_signal.notna()
+        if not bool(valid_mask.any()):
+            continue
+
+        row_driver = row_driver[valid_mask]
+        row_signal = row_signal[valid_mask]
+        if row_driver.empty:
+            continue
+
+        if mode == "top_n":
+            if top_n <= 0:
+                raise ValueError("breadth.top_n must be positive")
+            selected_index = row_driver.sort_values(ascending=ascending).index[:top_n]
+            selected_signal = row_signal.reindex(selected_index)
+        elif mode == "quantile":
+            if quantiles <= 0:
+                raise ValueError("breadth.quantiles must be positive")
+            ranks = row_driver.rank(method="first", ascending=ascending).astype(float)
+            counts = float(len(ranks))
+            buckets = 1.0 + np.floor((ranks - 1.0) * float(quantiles) / counts)
+            selected_mask = buckets.isin([float(value) for value in bucket_values])
+            selected_signal = row_signal[selected_mask]
+        else:
+            raise ValueError(f"Unsupported breadth mode for frame_v2 graph: {mode}")
+
+        if selected_signal.empty:
+            breadth_value = 0.0
+        else:
+            breadth_value = float(selected_signal.ne(0.0).mean())
+
+        result.loc[timestamp, :] = breadth_value
+
+    return result
+
+
 def _weighted_sum_frame(
     inputs: list[tuple[pd.DataFrame, float]],
     combine: str | None,
@@ -145,6 +197,8 @@ def _spec_dependencies(spec: FeatureSpec, supported_source_columns: set[str]) ->
         return list(spec.logical.features)
     if spec.state is not None:
         return [spec.state.entry_feature, spec.state.exit_feature]
+    if spec.breadth is not None:
+        return [spec.breadth.driver_feature, spec.breadth.signal_feature]
     if spec.components:
         return [component.feature_column for component in spec.components]
     if spec.source is None:
@@ -207,6 +261,19 @@ def _feature_spec_signature(spec: FeatureSpec) -> tuple[Any, ...]:
             else (
                 spec.state.entry_feature,
                 spec.state.exit_feature,
+            )
+        ),
+        (
+            None
+            if spec.breadth is None
+            else (
+                spec.breadth.driver_feature,
+                spec.breadth.signal_feature,
+                spec.breadth.mode,
+                spec.breadth.top_n,
+                spec.breadth.quantiles,
+                tuple(spec.breadth.bucket_values),
+                spec.breadth.ascending,
             )
         ),
         spec.column_name,
@@ -324,6 +391,23 @@ def build_feature_frames_from_cache_graph(
                     frame_cache[cache_key] = frames[name]
                 return frames[name]
 
+            if spec.breadth is not None:
+                breadth = spec.breadth
+                driver_frame = frames[breadth.driver_feature]
+                signal_frame = frames[breadth.signal_feature]
+                frames[name] = _breadth_frame(
+                    driver_frame,
+                    signal_frame,
+                    mode=breadth.mode,
+                    top_n=int(breadth.top_n),
+                    quantiles=int(breadth.quantiles),
+                    bucket_values=tuple(int(value) for value in breadth.bucket_values),
+                    ascending=bool(breadth.ascending),
+                )
+                if cache_key is not None:
+                    frame_cache[cache_key] = frames[name]
+                return frames[name]
+
             if spec.components:
                 component_inputs = [
                     (frames[component.feature_column], float(component.weight))
@@ -335,7 +419,7 @@ def build_feature_frames_from_cache_graph(
                 return frames[name]
 
             if spec.source is None:
-                raise ValueError("frame_v2 feature graph spec must define source, compare, logical, state, or components")
+                raise ValueError("frame_v2 feature graph spec must define source, compare, logical, state, breadth, or components")
 
             if spec.source.startswith("market:"):
                 _, column = _parse_market_source(spec.source)
